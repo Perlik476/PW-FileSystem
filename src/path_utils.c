@@ -126,12 +126,10 @@ bool is_substring(const char *a, const char *b) {
 
     size_t size_a = strlen(a);
     for (size_t i = 0; i < size_a; i++) {
-        printf("%c", a[i]);
         if (a[i] != b[i]) {
             return false;
         }
     }
-    printf("\n");
 
     return true;
 }

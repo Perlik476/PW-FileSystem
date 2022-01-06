@@ -97,7 +97,7 @@ void tree_free(Tree *tree) {
 }
 
 char *tree_list(Tree *tree, const char *path) {
-    printf("tree_list\n");
+//    printf("tree_list\n");
     if (!is_path_valid(path)) {
         return NULL;
     }
@@ -111,7 +111,7 @@ char *tree_list(Tree *tree, const char *path) {
 }
 
 int tree_create(Tree *tree, const char *path) {
-    printf("tree_create\n");
+//    printf("tree_create\n");
     if (!is_path_valid(path)) {
         return EINVAL;
     }
@@ -140,7 +140,7 @@ int tree_create(Tree *tree, const char *path) {
 }
 
 int tree_remove(Tree *tree, const char *path) {
-    printf("tree_remove\n");
+//    printf("tree_remove\n");
     if (!is_path_valid(path)) {
         return EINVAL;
     }
@@ -177,7 +177,7 @@ void print_map(HashMap* map) {
 }
 
 int tree_move(Tree *tree, const char *source, const char *target) {
-    printf("tree_move\n");
+//    printf("tree_move\n");
     if (!is_path_valid(source) || !is_path_valid(target)) {
         return EINVAL;
     }
