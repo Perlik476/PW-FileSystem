@@ -12,4 +12,8 @@ add_library(path_utils src/path_utils.c)
 add_executable(main src/main.c)
 target_link_libraries(main Tree HashMap err pthread path_utils)
 
+add_library(sequential_small src/tests/sequential_small.c src/tests/sequential_small.h src/tests/test.c)
+add_executable(test src/tests/test.c)
+target_link_libraries(test sequential_small Tree HashMap err pthread path_utils)
+
 install(TARGETS DESTINATION src)
