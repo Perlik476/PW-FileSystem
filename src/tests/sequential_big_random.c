@@ -108,11 +108,17 @@ void sequential_big_random() {
 	assert(f(tree_create(tree, "/c/b/c/c/")) == ENOENT);
 	assert(f(tree_move(tree, "/a/c/c/", "/b/")) == ENOENT);
 	assert(f(tree_move(tree, "/", "/")) == EBUSY);
+    printf("%s\n", tree_list(tree, "/"));
 	assert(f(tree_create(tree, "/c/c/")) == 0);
+    printf("%s\n", tree_list(tree, "/"));
 	assert(f(tree_create(tree, "/c/a/a/")) == ENOENT);
+    printf("%s\n", tree_list(tree, "/"));
 	assert(f(tree_move(tree, "/c/b/a/", "/")) == EEXIST);
+    printf("%s\n", tree_list(tree, "/"));
 	assert(f(tree_move(tree, "/c/", "/b/")) == EEXIST);
+    printf("%s\n", tree_list(tree, "/"));
 	assert(f(tree_move(tree, "/b/", "/c/a/b/")) == ENOENT);
+    printf("%s\n", tree_list(tree, "/"));
     printf("%d\n", tree_move(tree, "/c/", "/c/"));
 	assert(f(tree_move(tree, "/c/", "/c/")) == 0);
 	assert(f(tree_create(tree, "/c/c/c/")) == 0);
@@ -155,6 +161,8 @@ void sequential_big_random() {
 	assert(f(tree_move(tree, "/c/c/b/", "/a/a/b/b/")) == ENOENT);
 	assert(f(tree_create(tree, "/")) == EEXIST);
 	assert(f(tree_create(tree, "/a/a/")) == ENOENT);
+    printf("%d\n", tree_move(tree, "/c/", "/c/c/"));
+
 	assert(f(tree_move(tree, "/c/", "/c/c/")) == -1);
 	assert(f(tree_move(tree, "/a/b/b/", "/b/c/a/c/")) == ENOENT);
 	assert(f(tree_create(tree, "/b/")) == EEXIST);
@@ -648,6 +656,7 @@ void sequential_big_random() {
 	assert(f(tree_remove(tree, "/b/b/a/c/")) == ENOENT);
 	assert(f(tree_create(tree, "/b/c/a/a/")) == ENOENT);
 	assert(f(tree_remove(tree, "/a/a/c/")) == ENOENT);
+    printf("%d\n", tree_move(tree, "/a/", "/a/c/b/a/"));
 	assert(f(tree_move(tree, "/a/", "/a/c/b/a/")) == -1);
 	assert(f(tree_create(tree, "/c/")) == EEXIST);
 	assert(f(tree_create(tree, "/c/a/b/")) == EEXIST);
@@ -2292,6 +2301,7 @@ void sequential_big_random() {
 	assert(f(tree_move(tree, "/b/b/", "/")) == EEXIST);
 	assert(f(tree_remove(tree, "/c/c/a/c/")) == ENOENT);
 	assert(f(tree_move(tree, "/a/c/a/b/", "/a/c/c/")) == ENOENT);
+    printf("%d\n", tree_move(tree, "/a/b/", "/a/b/b/"));
 	assert(f(tree_move(tree, "/a/b/", "/a/b/b/")) == -1);
 	assert(f(tree_remove(tree, "/c/c/a/")) == ENOENT);
 	assert(f(tree_move(tree, "/b/c/a/", "/")) == EEXIST);

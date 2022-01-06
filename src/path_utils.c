@@ -118,3 +118,20 @@ char* make_map_contents_string(HashMap* map)
     free(keys);
     return result;
 }
+
+bool is_substring(const char *a, const char *b) {
+    if (strlen(a) >= strlen(b)) {
+        return false;
+    }
+
+    size_t size_a = strlen(a);
+    for (size_t i = 0; i < size_a; i++) {
+        printf("%c", a[i]);
+        if (a[i] != b[i]) {
+            return false;
+        }
+    }
+    printf("\n");
+
+    return true;
+}

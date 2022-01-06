@@ -165,6 +165,17 @@ int tree_remove(Tree *tree, const char *path) {
     return err;
 }
 
+void print_map(HashMap* map) {
+    const char* key = NULL;
+    void* value = NULL;
+    printf("Size=%zd\n", hmap_size(map));
+    HashMapIterator it = hmap_iterator(map);
+    while (hmap_next(map, &it, &key, &value)) {
+        printf("Key=%s Value=%p\n", key, value);
+    }
+    printf("\n");
+}
+
 int tree_move(Tree *tree, const char *source, const char *target) {
     printf("tree_move\n");
     if (!is_path_valid(source) || !is_path_valid(target)) {
@@ -177,6 +188,15 @@ int tree_move(Tree *tree, const char *source, const char *target) {
         return EEXIST;
     }
 
+    if (is_substring(source, target)) {
+//        free(source_child_name);
+//        free(path_to_source_parent);
+//        free(target_child_name);
+//        free(path_to_target_parent);
+        return -1;
+    }
+
+
     char *source_child_name = malloc(sizeof(char) * (MAX_FOLDER_NAME_LENGTH + 1));
     char *path_to_source_parent = make_path_to_parent(source, source_child_name);
 
@@ -187,8 +207,12 @@ int tree_move(Tree *tree, const char *source, const char *target) {
         return ENOENT;
     }
 
+
+
     Node *source_node = (Node *)hmap_get(source_parent_node->map, source_child_name);
     if (!source_node) {
+//        print_map(tree->root->map);
+//        printf("%s, %s\n", path_to_source_parent, source_child_name);
         free(source_child_name);
         free(path_to_source_parent);
         return ENOENT;
@@ -198,6 +222,7 @@ int tree_move(Tree *tree, const char *source, const char *target) {
     char *path_to_target_parent = make_path_to_parent(target, target_child_name);
 
     Node *target_parent_node = get_node(tree->root, path_to_target_parent);
+
     if (!target_parent_node) {
         free(source_child_name);
         free(path_to_source_parent);
@@ -206,9 +231,24 @@ int tree_move(Tree *tree, const char *source, const char *target) {
         return ENOENT;
     }
 
-    hmap_remove(source_parent_node->map, source_child_name);
+    if (!strcmp(source, target)) {
+        free(path_to_source_parent);
+        free(path_to_target_parent);
+        free(source_child_name);
+        free(target_child_name);
+        return 0;
+    }
+
+//    if (target_parent_node == source_node) {
+//        return -1;
+//    }
+
 
     int err = add_child(target_parent_node, source_node, target_child_name);
+
+    if (!err) {
+        hmap_remove(source_parent_node->map, source_child_name);
+    }
 
     free(path_to_source_parent);
     free(path_to_target_parent);
