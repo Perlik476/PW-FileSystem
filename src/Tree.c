@@ -6,6 +6,8 @@
 #include "path_utils.h"
 #include "string.h"
 #include "stdio.h"
+#include "err.h"
+#include <pthread.h>
 
 struct Node {
     HashMap *map;
@@ -15,6 +17,7 @@ typedef struct Node Node;
 
 struct Tree {
     Node *root;
+    pthread_mutex_t mutex;
 };
 
 Node *node_new() {
@@ -98,24 +101,37 @@ void tree_free(Tree *tree) {
 
 char *tree_list(Tree *tree, const char *path) {
 //    printf("tree_list\n");
+    pthread_mutex_lock(&tree->mutex);
+
     if (!is_path_valid(path)) {
+        pthread_mutex_unlock(&tree->mutex);
         return NULL;
     }
 
     Node *node = get_node(tree->root, path);
     if (!node) {
+        pthread_mutex_unlock(&tree->mutex);
         return NULL;
     }
 
-    return get_children_names(node);
+
+
+    char *result = get_children_names(node);
+
+    pthread_mutex_unlock(&tree->mutex);
+
+    return result;
 }
 
 int tree_create(Tree *tree, const char *path) {
 //    printf("tree_create\n");
+    pthread_mutex_lock(&tree->mutex);
     if (!is_path_valid(path)) {
+        pthread_mutex_unlock(&tree->mutex);
         return EINVAL;
     }
     if (!strcmp(path, "/")) {
+        pthread_mutex_unlock(&tree->mutex);
         return EEXIST;
     }
 
@@ -126,6 +142,7 @@ int tree_create(Tree *tree, const char *path) {
     free(path_to_parent);
     if (!parent) {
         free(new_node_name);
+        pthread_mutex_unlock(&tree->mutex);
         return ENOENT;
     }
 
@@ -136,15 +153,19 @@ int tree_create(Tree *tree, const char *path) {
         node_destroy(new_node);
     }
 //    printf("tree_create: %d\n", err);
+    pthread_mutex_unlock(&tree->mutex);
     return err;
 }
 
 int tree_remove(Tree *tree, const char *path) {
 //    printf("tree_remove\n");
+    pthread_mutex_lock(&tree->mutex);
     if (!is_path_valid(path)) {
+        pthread_mutex_unlock(&tree->mutex);
         return EINVAL;
     }
     if (!strcmp(path, "/")) {
+        pthread_mutex_unlock(&tree->mutex);
         return EBUSY;
     }
 
@@ -155,6 +176,7 @@ int tree_remove(Tree *tree, const char *path) {
     if (!parent) {
         free(child_name);
         free(path_to_parent);
+        pthread_mutex_unlock(&tree->mutex);
         return ENOENT;
     }
 
@@ -162,6 +184,7 @@ int tree_remove(Tree *tree, const char *path) {
     free(child_name);
     free(path_to_parent);
 //    printf("tree_remove: %d\n", err);
+    pthread_mutex_unlock(&tree->mutex);
     return err;
 }
 
@@ -177,14 +200,18 @@ void print_map(HashMap* map) {
 }
 
 int tree_move(Tree *tree, const char *source, const char *target) {
+    pthread_mutex_lock(&tree->mutex);
 //    printf("tree_move\n");
     if (!is_path_valid(source) || !is_path_valid(target)) {
+        pthread_mutex_unlock(&tree->mutex);
         return EINVAL;
     }
     if (!strcmp(source, "/")) {
+        pthread_mutex_unlock(&tree->mutex);
         return EBUSY;
     }
     if (!strcmp(target, "/")) {
+        pthread_mutex_unlock(&tree->mutex);
         return EEXIST;
     }
 
@@ -193,6 +220,7 @@ int tree_move(Tree *tree, const char *source, const char *target) {
 //        free(path_to_source_parent);
 //        free(target_child_name);
 //        free(path_to_target_parent);
+        pthread_mutex_unlock(&tree->mutex);
         return -1;
     }
 
@@ -204,6 +232,7 @@ int tree_move(Tree *tree, const char *source, const char *target) {
     if (!source_parent_node) {
         free(source_child_name);
         free(path_to_source_parent);
+        pthread_mutex_unlock(&tree->mutex);
         return ENOENT;
     }
 
@@ -215,6 +244,7 @@ int tree_move(Tree *tree, const char *source, const char *target) {
 //        printf("%s, %s\n", path_to_source_parent, source_child_name);
         free(source_child_name);
         free(path_to_source_parent);
+        pthread_mutex_unlock(&tree->mutex);
         return ENOENT;
     }
 
@@ -228,6 +258,7 @@ int tree_move(Tree *tree, const char *source, const char *target) {
         free(path_to_source_parent);
         free(target_child_name);
         free(path_to_target_parent);
+        pthread_mutex_unlock(&tree->mutex);
         return ENOENT;
     }
 
@@ -236,6 +267,7 @@ int tree_move(Tree *tree, const char *source, const char *target) {
         free(path_to_target_parent);
         free(source_child_name);
         free(target_child_name);
+        pthread_mutex_unlock(&tree->mutex);
         return 0;
     }
 
@@ -255,5 +287,6 @@ int tree_move(Tree *tree, const char *source, const char *target) {
     free(source_child_name);
     free(target_child_name);
 //    printf("tree_move: %d\n", err);
+    pthread_mutex_unlock(&tree->mutex);
     return err;
 }

@@ -1,0 +1,12 @@
+set(TESTS_PATH "testy-zad2/")
+
+add_executable(main 
+	"${TESTS_PATH}test.c"
+	"${TESTS_PATH}utils.c"
+	"${TESTS_PATH}valid_path.c"
+	"${TESTS_PATH}sequential_small.c"
+	"${TESTS_PATH}sequential_big_random.c"
+	"${TESTS_PATH}deadlock.c"
+	"${TESTS_PATH}concurrent_same_as_some_sequential.c"
+	"${TESTS_PATH}liveness.c"
+)

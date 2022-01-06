@@ -14,7 +14,12 @@ target_link_libraries(main Tree HashMap err pthread path_utils)
 
 add_library(sequential_small src/tests/sequential_small.c src/tests/sequential_small.h)
 add_library(sequential_big src/tests/sequential_big_random.c src/tests/sequential_big_random.h)
+add_library(liveness src/tests/liveness.c src/tests/liveness.h)
+add_library(valid_path src/tests/valid_path.c src/tests/valid_path.h)
+add_library(deadlock src/tests/deadlock.c src/tests/deadlock.h)
+add_library(utils src/tests/utils.c src/tests/utils.h)
+add_library(concurrent_same_as_some_sequential src/tests/concurrent_same_as_some_sequential.c src/tests/concurrent_same_as_some_sequential.h)
 add_executable(test src/tests/test.c)
-target_link_libraries(test sequential_small sequential_big Tree HashMap err pthread path_utils)
+target_link_libraries(test sequential_small sequential_big concurrent_same_as_some_sequential liveness valid_path deadlock utils Tree HashMap err pthread path_utils)
 
 install(TARGETS DESTINATION src)
