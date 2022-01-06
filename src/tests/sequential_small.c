@@ -19,6 +19,7 @@ void sequential_small() {
     assert(tree_create(tree, "/a/b/") == 0);
     assert(tree_create(tree, "/a/b/") == EEXIST);
     assert(tree_create(tree, "/a/b/c/d/") == ENOENT);
+//    tree_free(tree);
     assert(tree_remove(tree, "/a/") == ENOTEMPTY);
     assert(tree_create(tree, "/b/") == 0);
     assert(tree_create(tree, "/a/c/") == 0);

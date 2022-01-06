@@ -2,6 +2,7 @@
 #include "../Tree.h"
 #include <assert.h>
 #include <errno.h>
+#include <stdio.h>
 
 int f(int err) { if (-20 <= err && err <= -1) return -1; return err; }
 void sequential_big_random() {

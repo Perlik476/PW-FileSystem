@@ -29,7 +29,6 @@ void node_destroy(Node *node) {
     HashMapIterator it = hmap_iterator(node->map);
     while (hmap_next(node->map, &it, &key, &value)) {
         node_destroy((Node *) value);
-        free((char *) key);
     }
     hmap_free(node->map);
     free(node);
@@ -52,7 +51,6 @@ Node *get_node(Node *node, const char *path) {
     }
 
     Node *result_node = get_node(next_node, new_path);
-    free(next_node_name);
     return result_node;
 }
 
@@ -125,12 +123,18 @@ int tree_create(Tree *tree, const char *path) {
     char *path_to_parent = make_path_to_parent(path, new_node_name);
 
     Node *parent = get_node(tree->root, path_to_parent);
+    free(path_to_parent);
     if (!parent) {
+        free(new_node_name);
         return ENOENT;
     }
 
     Node *new_node = node_new();
     int err = add_child(parent, new_node, new_node_name);
+    free(new_node_name); // TODO ????
+    if (err != 0) {
+        node_destroy(new_node);
+    }
 //    printf("tree_create: %d\n", err);
     return err;
 }
@@ -149,11 +153,14 @@ int tree_remove(Tree *tree, const char *path) {
 
     Node *parent = get_node(tree->root, path_to_parent);
     if (!parent) {
+        free(child_name);
+        free(path_to_parent);
         return ENOENT;
     }
 
     int err = remove_child(parent, child_name);
     free(child_name);
+    free(path_to_parent);
 //    printf("tree_remove: %d\n", err);
     return err;
 }
@@ -175,37 +182,38 @@ int tree_move(Tree *tree, const char *source, const char *target) {
 
     Node *source_parent_node = get_node(tree->root, path_to_source_parent);
     if (!source_parent_node) {
+        free(source_child_name);
+        free(path_to_source_parent);
         return ENOENT;
     }
-
-//    printf("xd1\n");
 
     Node *source_node = (Node *)hmap_get(source_parent_node->map, source_child_name);
     if (!source_node) {
+        free(source_child_name);
+        free(path_to_source_parent);
         return ENOENT;
     }
-
-//    printf("xd2\n");
 
     char *target_child_name = malloc(sizeof(char) * (MAX_FOLDER_NAME_LENGTH + 1));
     char *path_to_target_parent = make_path_to_parent(target, target_child_name);
 
     Node *target_parent_node = get_node(tree->root, path_to_target_parent);
     if (!target_parent_node) {
+        free(source_child_name);
+        free(path_to_source_parent);
+        free(target_child_name);
+        free(path_to_target_parent);
         return ENOENT;
     }
 
-//    printf("xd3\n");
-
     hmap_remove(source_parent_node->map, source_child_name);
-
-//    printf("xd4\n");
 
     int err = add_child(target_parent_node, source_node, target_child_name);
 
     free(path_to_source_parent);
     free(path_to_target_parent);
     free(source_child_name);
+    free(target_child_name);
 //    printf("tree_move: %d\n", err);
     return err;
 }
