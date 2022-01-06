@@ -69,5 +69,25 @@ int main() {
     printf("%s\n", res);
     free(res);
 
+    tree_create(tree, "/x/xdd/");
+
+    printf("tree_create done\n");
+
+    tree_create(tree, "/lol/");
+
+    printf("tree_create done\n");
+
+    printf("%d\n", tree_move(tree, "/x/", "/lol/bro/"));
+
+    printf("tree_move done\n");
+
+    res = tree_list(tree, "/x/");
+    printf("%s\n", res);
+    free(res);
+
+    res = tree_list(tree, "/lol/bro/");
+    printf("%s\n", res);
+    free(res);
+
     return 0;
 }
