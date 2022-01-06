@@ -47,6 +47,10 @@ Node *get_node(Node *node, const char *path) {
     Node *next_node = hmap_get(node->map, next_node_name);
     free(next_node_name);
 
+    if (!next_node) {
+        return NULL;
+    }
+
     Node *result_node = get_node(next_node, new_path);
     free(next_node_name);
     return result_node;
@@ -95,7 +99,7 @@ void tree_free(Tree *tree) {
 }
 
 char *tree_list(Tree *tree, const char *path) {
-//    printf("tree_list\n");
+    printf("tree_list\n");
     if (!is_path_valid(path)) {
         return NULL;
     }
@@ -109,9 +113,12 @@ char *tree_list(Tree *tree, const char *path) {
 }
 
 int tree_create(Tree *tree, const char *path) {
-//    printf("tree_create\n");
+    printf("tree_create\n");
     if (!is_path_valid(path)) {
         return EINVAL;
+    }
+    if (!strcmp(path, "/")) {
+        return EEXIST;
     }
 
     char *new_node_name = malloc(sizeof(char) * (MAX_FOLDER_NAME_LENGTH + 1));
@@ -129,7 +136,7 @@ int tree_create(Tree *tree, const char *path) {
 }
 
 int tree_remove(Tree *tree, const char *path) {
-//    printf("tree_remove\n");
+    printf("tree_remove\n");
     if (!is_path_valid(path)) {
         return EINVAL;
     }
@@ -152,9 +159,15 @@ int tree_remove(Tree *tree, const char *path) {
 }
 
 int tree_move(Tree *tree, const char *source, const char *target) {
-//    printf("tree_move\n");
+    printf("tree_move\n");
     if (!is_path_valid(source) || !is_path_valid(target)) {
         return EINVAL;
+    }
+    if (!strcmp(source, "/")) {
+        return EBUSY;
+    }
+    if (!strcmp(target, "/")) {
+        return EEXIST;
     }
 
     char *source_child_name = malloc(sizeof(char) * (MAX_FOLDER_NAME_LENGTH + 1));

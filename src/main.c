@@ -77,7 +77,7 @@ int main() {
 
     printf("tree_create done\n");
 
-    printf("%d\n", tree_move(tree, "/x/", "/lol/bro/"));
+    printf("%d\n", tree_move(tree, "/x/", "/x/"));
 
     printf("tree_move done\n");
 
@@ -88,6 +88,8 @@ int main() {
     res = tree_list(tree, "/lol/bro/");
     printf("%s\n", res);
     free(res);
+
+    printf("%d", tree_create(tree, "/"));
 
     return 0;
 }
