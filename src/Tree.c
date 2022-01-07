@@ -355,10 +355,10 @@ int tree_create(Tree *tree, const char *path) {
     if (err != 0) {
         node_destroy(new_node);
     }
-    free(path_to_parent);
 
     writer_ending_protocol(parent);
     get_node(tree->root, path_to_parent, READER_END);
+    free(path_to_parent);
 //    printf("tree_create: %d\n", err);
     return err;
 }
@@ -396,7 +396,6 @@ int tree_remove(Tree *tree, const char *path) {
     free(path_to_parent);
 
     writer_ending_protocol(parent);
-    get_node(tree->root, path_to_parent, READER_END);
 //    printf("tree_remove: %d\n", err);
     return err;
 }
