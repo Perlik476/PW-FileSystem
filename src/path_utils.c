@@ -94,7 +94,7 @@ char* make_map_contents_string(HashMap* map)
     for (const char** key = keys; *key; ++key)
         result_size += strlen(*key) + 1;
 
-    // Return empty string if map is empty.
+    // Return empty string if children is empty.
     if (!result_size) {
         // Note we can't just return "", as it can't be free'd.
         char* result = malloc(1);
@@ -132,4 +132,20 @@ bool is_substring(const char *a, const char *b) {
     }
 
     return true;
+}
+
+char *get_lca(const char *a, const char *b) {
+    char *path = malloc(sizeof(char) * MAX_PATH_LENGTH);
+
+    size_t size_a = strlen(a);
+    for (size_t i = 0; i < size_a; i++) {
+        if (a[i] == b[i]) {
+            path[i] = a[i];
+        }
+        else {
+            return path;
+        }
+    }
+
+    return path;
 }

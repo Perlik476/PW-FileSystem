@@ -17,7 +17,7 @@ struct Pair {
 
 struct HashMap {
     Pair* buckets[N_BUCKETS]; // Linked lists of key-value pairs.
-    size_t size; // total number of entries in map.
+    size_t size; // total number of entries in children.
 };
 
 static unsigned int get_hash(const char* key);

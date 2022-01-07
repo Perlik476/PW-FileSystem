@@ -6,12 +6,12 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-//void print_map(HashMap* map) {
+//void print_map(HashMap* children) {
 //    const char* key = NULL;
 //    void* value = NULL;
-//    printf("Size=%zd\n", hmap_size(map));
-//    HashMapIterator it = hmap_iterator(map);
-//    while (hmap_next(map, &it, &key, &value)) {
+//    printf("Size=%zd\n", hmap_size(children));
+//    HashMapIterator it = hmap_iterator(children);
+//    while (hmap_next(children, &it, &key, &value)) {
 //        printf("Key=%s Value=%p\n", key, value);
 //    }
 //    printf("\n");
@@ -20,16 +20,16 @@
 //
 //int main(void)
 //{
-//    HashMap* map = hmap_new();
-//    hmap_insert(map, "a", hmap_new());
-//    print_map(map);
+//    HashMap* children = hmap_new();
+//    hmap_insert(children, "a", hmap_new());
+//    print_map(children);
 //
-//    HashMap* child = (HashMap*)hmap_get(map, "a");
+//    HashMap* child = (HashMap*)hmap_get(children, "a");
 //    hmap_free(child);
-//    hmap_remove(map, "a");
-//    print_map(map);
+//    hmap_remove(children, "a");
+//    print_map(children);
 //
-//    hmap_free(map);
+//    hmap_free(children);
 //
 //    return 0;
 //}

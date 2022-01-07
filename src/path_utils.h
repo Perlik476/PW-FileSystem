@@ -41,12 +41,12 @@ char* make_path_to_parent(const char* path, char* component);
 
 // Return an array containing all keys, lexicographically sorted.
 // The result is null-terminated.
-// Keys are not copied, they are only valid as long as the map.
+// Keys are not copied, they are only valid as long as the children.
 // The caller should free the result.
 const char** make_map_contents_array(HashMap* map);
 
-// Return a string containing all keys in map, sorted, comma-separated.
-// The result has no trailing comma. An empty map yields an empty string.
+// Return a string containing all keys in children, sorted, comma-separated.
+// The result has no trailing comma. An empty children yields an empty string.
 // The caller should free the result.
 char* make_map_contents_string(HashMap* map);
 
