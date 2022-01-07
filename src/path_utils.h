@@ -51,3 +51,5 @@ const char** make_map_contents_array(HashMap* map);
 char* make_map_contents_string(HashMap* map);
 
 bool is_substring(const char *a, const char *b);
+
+char *make_path_to_lca(const char *a, const char *b);

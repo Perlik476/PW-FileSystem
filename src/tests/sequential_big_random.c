@@ -111,6 +111,7 @@ void sequential_big_random() {
 	assert(f(tree_create(tree, "/c/c/")) == 0);
 	assert(f(tree_create(tree, "/c/a/a/")) == ENOENT);
 	assert(f(tree_move(tree, "/c/b/a/", "/")) == EEXIST);
+    printf("%d\n", tree_move(tree, "/c/", "/b/"));
 	assert(f(tree_move(tree, "/c/", "/b/")) == EEXIST);
 	assert(f(tree_move(tree, "/b/", "/c/a/b/")) == ENOENT);
 	assert(f(tree_move(tree, "/c/", "/c/")) == 0);

@@ -134,7 +134,7 @@ bool is_substring(const char *a, const char *b) {
     return true;
 }
 
-char *get_lca(const char *a, const char *b) {
+char *make_path_to_lca(const char *a, const char *b) {
     char *path = malloc(sizeof(char) * MAX_PATH_LENGTH);
 
     size_t size_a = strlen(a);
@@ -143,9 +143,13 @@ char *get_lca(const char *a, const char *b) {
             path[i] = a[i];
         }
         else {
+            path[i] = '\0';
             return path;
         }
     }
+    path[size_a] = '\0';
+    printf("xdddd\n");
+    printf("%s\n", path);
 
     return path;
 }
