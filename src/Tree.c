@@ -321,18 +321,48 @@ int tree_create(Tree *tree, const char *path) {
     char *new_node_name = malloc(sizeof(char) * (MAX_FOLDER_NAME_LENGTH + 1));
     char *path_to_parent = make_path_to_parent(path, new_node_name);
 
-    Node *parent = get_node(tree->root, path_to_parent, READER_BEGIN, true);
+    char *parent_name = malloc(sizeof(char) * (MAX_FOLDER_NAME_LENGTH + 1));
+    char *path_to_grandparent = make_path_to_parent(path_to_parent, parent_name);
+
+    Node *parent;
+    Node *grandparent;
+
+//    printf("a\n");
+    if (!strcmp(path_to_parent, "/")) {
+        grandparent = NULL;
+        parent = tree->root;
+    }
+    else {
+        grandparent = get_node(tree->root, path_to_grandparent, READER_BEGIN, true);
+        if (!grandparent) {
+            get_node(tree->root, path_to_grandparent, READER_END, true);
+            free(new_node_name);
+            free(parent_name);
+            free(path_to_parent);
+            free(path_to_grandparent);
+            return ENOENT;
+        }
+        else {
+            writer_beginning_protocol(grandparent);
+            parent = hmap_get(grandparent->children, parent_name);
+        }
+    }
+//    printf("b\n");
+
     if (!parent) {
         free(new_node_name);
-        get_node(tree->root, path_to_parent, READER_END, true);
+        if (grandparent) {
+            get_node(tree->root, path_to_grandparent, READER_END, true);
+            writer_ending_protocol(grandparent);
+        }
         free(path_to_parent);
         return ENOENT;
     }
 
-    if (parent->parent != NULL) {
-        reader_ending_protocol(parent->parent);
-        writer_beginning_protocol(parent->parent);
-    }
+//    if (parent->parent != NULL) {
+//        reader_ending_protocol(parent->parent);
+//        writer_beginning_protocol(parent->parent);
+//    }
     writer_beginning_protocol(parent);
 
     Node *new_node = node_new();
@@ -343,13 +373,17 @@ int tree_create(Tree *tree, const char *path) {
         node_destroy(new_node);
     }
 
+//    printf("c\n");
+
     writer_ending_protocol(parent);
-    if (parent->parent != NULL) {
-        writer_ending_protocol(parent->parent);
-        reader_beginning_protocol(parent->parent);
+    if (grandparent != NULL) {
+        writer_ending_protocol(grandparent);
+        get_node(tree->root, path_to_grandparent, READER_END, true);
     }
-    get_node(tree->root, path_to_parent, READER_END, true);
+//    printf("co\n");
     free(path_to_parent);
+    free(path_to_grandparent);
+    free(parent_name);
 //    printf("tree_create: %d\n", err);
     return err;
 }
@@ -400,6 +434,30 @@ void print_map(HashMap* map) {
         printf("Key=%s Value=%p\n", key, value);
     }
     printf("\n");
+}
+
+void lock_subtree(Node *node, bool first) {
+    if (first) {
+        writer_beginning_protocol(node);
+    }
+    const char *key = NULL;
+    void *value = NULL;
+    HashMapIterator it = hmap_iterator(node->children);
+    while (hmap_next(node->children, &it, &key, &value)) {
+        lock_subtree(value, true);
+    }
+}
+
+void unlock_subtree(Node *node, bool first) {
+    if (first) {
+        writer_ending_protocol(node);
+    }
+    const char *key = NULL;
+    void *value = NULL;
+    HashMapIterator it = hmap_iterator(node->children);
+    while (hmap_next(node->children, &it, &key, &value)) {
+        unlock_subtree(value, true);
+    }
 }
 
 int tree_move(Tree *tree, const char *source, const char *target) {
@@ -561,7 +619,11 @@ int tree_move(Tree *tree, const char *source, const char *target) {
 
 //    printf("cyce\n");
 
+    lock_subtree(source_node, false);
+
     int err = add_child(target_parent_node, source_node, target_child_name);
+
+    unlock_subtree(source_node, false);
 
 //    printf("wadowice\n");
 
