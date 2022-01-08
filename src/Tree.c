@@ -345,9 +345,9 @@ char *tree_list(Tree *tree, const char *path) {
 
     char *result = get_children_names(node);
 
-    reader_ending_protocol(node);
-
     get_node(tree->root, path, READER_END, true);
+
+    reader_ending_protocol(node);
 
     return result;
 }
