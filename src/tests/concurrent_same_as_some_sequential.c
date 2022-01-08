@@ -3,7 +3,7 @@
 // operacji istnieje taka permutacja, że jej sekwencyjne wykonanie
 // daje takie same kody błędów.
 
-#define THREAD_COUNT 12
+#define THREAD_COUNT 8
 #define ITERATIONS 10000
 
 #include "utils.h"
