@@ -4,7 +4,7 @@
 // daje takie same kody błędów.
 
 #define THREAD_COUNT 12
-#define ITERATIONS 100000
+#define ITERATIONS 10000
 
 #include "utils.h"
 #include "concurrent_same_as_some_sequential.h"

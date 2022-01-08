@@ -73,7 +73,7 @@ void *run_operations_individual(void *data) {
 }
 
 void liveness() {
-	for(int create_in_loop = 0; create_in_loop <= 1; ++create_in_loop) {
+	for(int create_in_loop = 0; create_in_loop <= 10; ++create_in_loop) {
 		printf("- running longevity test %d...\n", create_in_loop);
 
 		pthread_attr_t attr;
