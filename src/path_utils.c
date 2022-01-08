@@ -137,17 +137,25 @@ bool is_substring(const char *a, const char *b) {
 char *make_path_to_lca(const char *a, const char *b) {
     char *path = malloc(sizeof(char) * MAX_PATH_LENGTH);
 
-    size_t size_a = strlen(a);
-    for (size_t i = 0; i < size_a; i++) {
+    char *path_to_a_parent = make_path_to_parent(a, NULL);
+    char *path_to_b_parent = make_path_to_parent(b, NULL);
+
+    size_t size_a = strlen(path_to_a_parent);
+    size_t size_b = strlen(path_to_b_parent);
+    for (size_t i = 0; i < size_a && i < size_b; i++) {
         if (a[i] == b[i]) {
             path[i] = a[i];
         }
         else {
             path[i] = '\0';
+            free(path_to_a_parent);
+            free(path_to_b_parent);
             return path;
         }
     }
-    path[size_a] = '\0';
+    path[size_a > size_b ? size_b : size_a] = '\0';
+    free(path_to_a_parent);
+    free(path_to_b_parent);
 //    printf("xdddd\n");
 //    printf("%s\n", path);
 
