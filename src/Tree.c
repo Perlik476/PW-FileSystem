@@ -105,7 +105,7 @@ void reader_beginning_protocol(Node *node) {
 
     if (node->who_enters != READER_ENTERS) {
         node->readers_wait++;
-        while (!node->who_enters) {
+        while (node->who_enters != READER_ENTERS) {
             if ((err = pthread_cond_wait(&node->readers, &node->mutex)) != 0) {
                 syserr(err, "cond readers wait failed");
             }
@@ -114,7 +114,7 @@ void reader_beginning_protocol(Node *node) {
     }
 
     node->readers_count++;
-    if (node->readers_wait == 0 && node->movers_wait > 0) {
+    if (node->readers_wait == 0 && node->writers_wait > 0) {
         node->who_enters = WRITER_ENTERS;
     }
 
@@ -286,7 +286,7 @@ void tree_free(Tree *tree) {
 }
 
 char *tree_list(Tree *tree, const char *path) {
-//    printf("tree_list\n");
+    printf("tree_list\n");
 
     if (!is_path_valid(path)) {
         return NULL;
@@ -310,7 +310,7 @@ char *tree_list(Tree *tree, const char *path) {
 }
 
 int tree_create(Tree *tree, const char *path) {
-//    printf("tree_create\n");
+    printf("tree_create\n");
     if (!is_path_valid(path)) {
         return EINVAL;
     }
@@ -389,7 +389,7 @@ int tree_create(Tree *tree, const char *path) {
 }
 
 int tree_remove(Tree *tree, const char *path) {
-//    printf("tree_remove\n");
+    printf("tree_remove\n");
     if (!is_path_valid(path)) {
         return EINVAL;
     }
@@ -461,7 +461,7 @@ void unlock_subtree(Node *node, bool first) {
 }
 
 int tree_move(Tree *tree, const char *source, const char *target) {
-//    printf("tree_move: %s, %s\n", source, target);
+    printf("tree_move: %s, %s\n", source, target);
     if (!is_path_valid(source) || !is_path_valid(target)) {
         return EINVAL;
     }
@@ -484,16 +484,50 @@ int tree_move(Tree *tree, const char *source, const char *target) {
     char *path_to_lca = make_path_to_lca(source, target);
     size_t diff = strlen(path_to_lca) - 1;
 
+    char lca_name[MAX_FOLDER_NAME_LENGTH + 1];
+    char *path_to_lca_parent = make_path_to_parent(path_to_lca, lca_name);
+
+    Node *lca_parent_node;
+    Node *lca_node;
+
+    if (!path_to_lca_parent) {
+        lca_parent_node = NULL;
+        lca_node = tree->root;
+    }
+    else {
+        lca_parent_node = get_node(tree->root, path_to_lca_parent, READER_BEGIN, true);
+        if (!lca_parent_node) {
+            get_node(tree->root, path_to_lca_parent, READER_END, true);
+            return EINVAL;
+        }
+        else {
+            writer_beginning_protocol(lca_parent_node);
+            lca_node = hmap_get(lca_parent_node->children, lca_name);
+//            if (!lca_node) {
+//                get_node(tree->root, path_to_lca_parent, READER_END, true);
+//            }
+        }
+    }
+
 //    printf("get_lca: %s\n", path_to_lca);
-    Node *lca_node = get_node(tree->root, path_to_lca, READER_BEGIN, true);
+
+//    Node *lca_node = get_node(tree->root, path_to_lca, READER_BEGIN, true);
     if (!lca_node) {
-        get_node(tree->root, path_to_lca, READER_END, true);
+        if (lca_parent_node) {
+            writer_ending_protocol(lca_parent_node);
+            get_node(tree->root, path_to_lca_parent, READER_END, true);
+            free(path_to_lca_parent);
+        }
         free(path_to_lca);
 //        printf("xd1\n");
         return ENOENT;
     }
     if (!strcmp(source, target)) {
-        get_node(tree->root, path_to_lca, READER_END, true);
+        if (lca_parent_node) {
+            writer_ending_protocol(lca_parent_node);
+            get_node(tree->root, path_to_lca_parent, READER_END, true);
+            free(path_to_lca_parent);
+        }
         free(path_to_lca);
 //        printf("xd1\n");
         return 0;
@@ -511,7 +545,11 @@ int tree_move(Tree *tree, const char *source, const char *target) {
     if (!source_parent_node) {
         get_node(lca_node, path_to_source_parent, WRITER_END, false);
         writer_ending_protocol(lca_node);
-        get_node(tree->root, path_to_lca, READER_END, true);
+        if (lca_parent_node) {
+            writer_ending_protocol(lca_parent_node);
+            get_node(tree->root, path_to_lca_parent, READER_END, true);
+            free(path_to_lca_parent);
+        }
 
         free(path_to_lca);
         free(source_child_name);
@@ -531,7 +569,11 @@ int tree_move(Tree *tree, const char *source, const char *target) {
         }
         get_node(lca_node, path_to_source_parent, WRITER_END, false);
         writer_ending_protocol(lca_node);
-        get_node(tree->root, path_to_lca, READER_END, true);
+        if (lca_parent_node) {
+            writer_ending_protocol(lca_parent_node);
+            get_node(tree->root, path_to_lca_parent, READER_END, true);
+            free(path_to_lca_parent);
+        }
 
         free(path_to_lca);
         free(source_child_name);
@@ -552,6 +594,9 @@ int tree_move(Tree *tree, const char *source, const char *target) {
     if (path_to_target_parent == NULL) {
 //        printf("tu\n");
         target_parent_node = lca_node->parent;
+//        if (target_parent_node) {
+//            reader_ending_protocol(target_parent_node);
+//        }
         char *temp = make_path_to_parent(target, target_child_name);
         free(temp);
     }
@@ -568,7 +613,11 @@ int tree_move(Tree *tree, const char *source, const char *target) {
         }
         get_node(lca_node, path_to_source_parent, WRITER_END, false);
         writer_ending_protocol(lca_node);
-        get_node(tree->root, path_to_lca, READER_END, true);
+        if (lca_parent_node) {
+            writer_ending_protocol(lca_parent_node);
+            get_node(tree->root, path_to_lca_parent, READER_END, true);
+            free(path_to_lca_parent);
+        }
 
         free(path_to_lca);
         free(source_child_name);
@@ -606,7 +655,11 @@ int tree_move(Tree *tree, const char *source, const char *target) {
         }
         get_node(lca_node, path_to_source_parent, WRITER_END, false);
         writer_ending_protocol(lca_node);
-        get_node(tree->root, path_to_lca, READER_END, true);
+        if (lca_parent_node) {
+            writer_ending_protocol(lca_parent_node);
+            get_node(tree->root, path_to_lca_parent, READER_END, true);
+            free(path_to_lca_parent);
+        }
 
         free(path_to_lca);
         free(source_child_name);
@@ -651,7 +704,11 @@ int tree_move(Tree *tree, const char *source, const char *target) {
     }
     get_node(lca_node, path_to_source_parent, WRITER_END, false);
     writer_ending_protocol(lca_node);
-    get_node(tree->root, path_to_lca, READER_END, true);
+    if (lca_parent_node) {
+        writer_ending_protocol(lca_parent_node);
+        get_node(tree->root, path_to_lca_parent, READER_END, true);
+        free(path_to_lca_parent);
+    }
 
     free(path_to_lca);
     free(source_child_name);

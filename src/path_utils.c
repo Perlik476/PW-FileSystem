@@ -148,8 +148,8 @@ char *make_path_to_lca(const char *a, const char *b) {
         }
     }
     path[size_a] = '\0';
-    printf("xdddd\n");
-    printf("%s\n", path);
+//    printf("xdddd\n");
+//    printf("%s\n", path);
 
     return path;
 }

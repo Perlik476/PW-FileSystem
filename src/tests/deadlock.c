@@ -62,7 +62,7 @@ void run_tests_for_mask(int mask) {
 }
 
 void deadlock() {
-	for(int mask = 1; mask < (1 << 3) - 1; ++mask) {
+	for(int mask = 1; mask < (1 << 4) - 1; ++mask) {
 		printf("- running deadlock test for mask %d...\n", mask);
 		run_tests_for_mask(mask);
 	}
