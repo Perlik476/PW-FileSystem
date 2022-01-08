@@ -440,11 +440,15 @@ Tree *tree_new() {
 }
 
 void tree_free(Tree *tree) {
+    printf("%d\n", tree->root->count_in_subtree);
+    assert(tree->root->count_in_subtree == 0);
     node_destroy(tree->root);
     free(tree);
 }
 
 char *tree_list(Tree *tree, const char *path) {
+    printf("tree_list begin: %d\n", tree->root->count_in_subtree);
+    assert(tree->root->count_in_subtree == 0);
 //    printf("tree_list\n");
 
     if (!is_path_valid(path)) {
@@ -468,11 +472,19 @@ char *tree_list(Tree *tree, const char *path) {
 
     reader_ending_protocol(node);
 
+    decrease_counter_until(node, tree->root);
+
+    printf("tree_list end: %d\n", tree->root->count_in_subtree);
+    assert(tree->root->count_in_subtree == 0);
+
     return result;
 }
 
 int tree_create(Tree *tree, const char *path) {
 //    printf("tree_create\n");
+    printf("tree_create begin: %d\n", tree->root->count_in_subtree);
+    assert(tree->root->count_in_subtree == 0);
+
     if (!is_path_valid(path)) {
         return EINVAL;
     }
@@ -513,12 +525,18 @@ int tree_create(Tree *tree, const char *path) {
 
     free(path_to_parent);
 //    printf("tree_create: %d\n", err);
+    printf("tree_create end: %d\n", tree->root->count_in_subtree);
+    assert(tree->root->count_in_subtree == 0);
+
     return err;
 }
 
 
 int tree_remove(Tree *tree, const char *path) {
 //    printf("tree_remove\n");
+    printf("tree_remove begin: %d\n", tree->root->count_in_subtree);
+    assert(tree->root->count_in_subtree == 0);
+
     if (!is_path_valid(path)) {
         return EINVAL;
     }
@@ -553,6 +571,9 @@ int tree_remove(Tree *tree, const char *path) {
     decrease_counter_until(parent, tree->root);
 
 //    printf("tree_remove: %d\n", err);
+    printf("tree_remove end: %d\n", tree->root->count_in_subtree);
+    assert(tree->root->count_in_subtree == 0);
+
     return err;
 }
 
@@ -593,6 +614,9 @@ void unlock_subtree(Node *node, bool first) {
 
 int tree_move(Tree *tree, const char *source, const char *target) {
 //    printf("tree_move: %s, %s\n", source, target);
+    printf("tree_move begin: %d\n", tree->root->count_in_subtree);
+    assert(tree->root->count_in_subtree == 0);
+
     if (!is_path_valid(source) || !is_path_valid(target)) {
         return EINVAL;
     }
@@ -619,6 +643,8 @@ int tree_move(Tree *tree, const char *source, const char *target) {
     Node *lca_node = get_node(tree->root, path_to_lca, READER_BEGIN, true);
     if (!lca_node) {
         free(path_to_lca);
+        printf("tree_move end 1: %d\n", tree->root->count_in_subtree);
+        assert(tree->root->count_in_subtree == 0);
 //        printf("xd1\n");
         return ENOENT;
     }
@@ -634,13 +660,19 @@ int tree_move(Tree *tree, const char *source, const char *target) {
     char *path_to_source_parent = make_path_to_parent(source + diff, source_child_name);
 
 //    printf("get source parent \n");
+//    printf("%d\n", tree->root->count_in_subtree);
     Node *source_parent_node = get_node(lca_node, path_to_source_parent, WRITER_BEGIN, false);
+//    printf("%d\n", tree->root->count_in_subtree);
     if (!source_parent_node) {
         writer_ending_protocol(lca_node);
         decrease_counter_until(lca_node, tree->root);
 
         free(path_to_lca);
         free(path_to_source_parent);
+
+        printf("tree_move end 2: %d\n", tree->root->count_in_subtree);
+        assert(tree->root->count_in_subtree == 0);
+
         return ENOENT;
     }
 
@@ -654,29 +686,39 @@ int tree_move(Tree *tree, const char *source, const char *target) {
 
     Node *source_node = (Node *)hmap_get(source_parent_node->children, source_child_name);
     if (!source_node) {
+//        printf("%d\n", tree->root->count_in_subtree);
         if (source_parent_node != lca_node) {
             writer_ending_protocol(source_parent_node);
-            decrease_counter_until(source_parent_node, lca_node);
         }
+        decrease_counter_until(source_parent_node, lca_node);
+//        printf("%d\n", tree->root->count_in_subtree);
         writer_ending_protocol(lca_node);
         decrease_counter_until(lca_node, tree->root);
 
         free(path_to_lca);
         free(path_to_source_parent);
+
+        printf("tree_move end 3: %d\n", tree->root->count_in_subtree);
+        assert(tree->root->count_in_subtree == 0);
+
         return ENOENT;
     }
 
     if (!strcmp(source, target)) {
         if (source_parent_node != lca_node) {
             writer_ending_protocol(source_parent_node);
-            decrease_counter_until(source_parent_node, lca_node);
         }
+        decrease_counter_until(source_parent_node, lca_node);
 
         writer_ending_protocol(lca_node);
         decrease_counter_until(lca_node, tree->root);
 
         free(path_to_lca);
         free(path_to_source_parent);
+
+        printf("tree_move end 4: %d\n", tree->root->count_in_subtree);
+        assert(tree->root->count_in_subtree == 0);
+
         return 0;
     }
 
@@ -697,8 +739,8 @@ int tree_move(Tree *tree, const char *source, const char *target) {
         writer_ending_protocol(source_node);
         if (source_parent_node != lca_node) {
             writer_ending_protocol(source_parent_node);
-            decrease_counter_until(source_parent_node, lca_node);
         }
+        decrease_counter_until(source_parent_node, lca_node);
         writer_ending_protocol(lca_node);
         decrease_counter_until(lca_node, tree->root);
 
@@ -706,6 +748,10 @@ int tree_move(Tree *tree, const char *source, const char *target) {
         free(path_to_lca);
         free(path_to_source_parent);
         free(path_to_target_parent);
+
+        printf("tree_move end 5: %d\n", tree->root->count_in_subtree);
+        assert(tree->root->count_in_subtree == 0);
+
         return ENOENT;
     }
 
@@ -737,6 +783,10 @@ int tree_move(Tree *tree, const char *source, const char *target) {
         free(path_to_lca);
         free(path_to_source_parent);
         free(path_to_target_parent);
+
+        printf("tree_move end 6: %d\n", tree->root->count_in_subtree);
+        assert(tree->root->count_in_subtree == 0);
+
 //        printf("beka\n");
         return 0;
     }
@@ -774,6 +824,9 @@ int tree_move(Tree *tree, const char *source, const char *target) {
     free(path_to_target_parent);
 
 //    printf("koniec\n");
+
+    printf("tree_move end: %d\n", tree->root->count_in_subtree);
+    assert(tree->root->count_in_subtree == 0);
 
     return err;
 }
