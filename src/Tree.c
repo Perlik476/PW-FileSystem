@@ -114,6 +114,7 @@ void reader_beginning_protocol(Node *node) {
     }
 
     node->readers_count++;
+    assert(node->readers_count == 0 || node->writers_count == 0);
     if (node->readers_wait == 0 && node->writers_wait > 0) {
         node->who_enters = WRITER_ENTERS;
     }
@@ -131,6 +132,7 @@ void reader_ending_protocol(Node *node) {
     }
 
     node->readers_count--;
+    assert(node->readers_count >= 0);
     if (node->readers_count == 0 && node->writers_wait > 0) {
         node->who_enters = WRITER_ENTERS;
         if ((err = pthread_cond_broadcast(&node->writers)) != 0) {
@@ -164,6 +166,8 @@ void writer_beginning_protocol(Node *node) {
     }
 
     node->writers_count++;
+    node->who_enters = WRITER_ENTERS;
+    assert(node->readers_count == 0 || node->writers_count == 0);
 
     if ((err = pthread_mutex_unlock(&node->mutex)) != 0) {
         syserr(err, "mutex unlock failed");
@@ -178,6 +182,7 @@ void writer_ending_protocol(Node *node) {
     }
 
     node->writers_count--;
+    assert(node->writers_count >= 0);
     if (node->readers_wait > 0) {
         node->who_enters = READER_ENTERS;
         if ((err = pthread_cond_broadcast(&node->readers)) != 0) {
@@ -185,6 +190,7 @@ void writer_ending_protocol(Node *node) {
         }
     }
     else if (node->writers_wait > 0) {
+        node->who_enters = WRITER_ENTERS;
         if ((err = pthread_cond_broadcast(&node->writers)) != 0) {
             syserr(err, "cond writers broadcast failed");
         }
@@ -198,15 +204,13 @@ void writer_ending_protocol(Node *node) {
     }
 }
 
-
-
-Node *get_node(Node *node, const char *path, int type, bool lock_first) {
+Node *_get_node(Node *node, Node *first_node, const char *path, int type, bool lock_first) {
 //    printf("%s\n", path);
     if (!strcmp(path, "/")) {
         return node;
     }
 
-    if (lock_first) {
+    if (lock_first || first_node != node) {
         if (type == READER_BEGIN) {
             reader_beginning_protocol(node);
         }
@@ -228,10 +232,49 @@ Node *get_node(Node *node, const char *path, int type, bool lock_first) {
     free(next_node_name);
 
     if (!next_node) {
+        while (node != first_node) {
+            if (type == READER_BEGIN) {
+//                printf("%d\n", node->readers_count);
+                reader_ending_protocol(node);
+            }
+            else if (type == READER_END) {
+                assert(false);
+//                reader_ending_protocol(node);
+            }
+            else if (type == WRITER_BEGIN) {
+                writer_ending_protocol(node);
+            }
+            else if (type == WRITER_END) {
+                assert(false);
+//                writer_ending_protocol(node);
+            }
+            node = node->parent;
+        }
+        if (lock_first) {
+            if (type == READER_BEGIN) {
+                reader_ending_protocol(node);
+            }
+            else if (type == READER_END) {
+                assert(false);
+//                reader_ending_protocol(node);
+            }
+            else if (type == WRITER_BEGIN) {
+                writer_ending_protocol(node);
+            }
+            else if (type == WRITER_END) {
+                assert(false);
+//                writer_ending_protocol(node);
+            }
+        }
         return NULL;
     }
 
-    Node *result_node = get_node(next_node, new_path, type, true);
+    Node *result_node = _get_node(next_node, first_node, new_path, type, lock_first);
+    return result_node;
+}
+
+Node *get_node(Node *node, const char *path, int type, bool lock_first) {
+    Node *result_node = _get_node(node, node, path, type, lock_first);
     return result_node;
 }
 
@@ -286,7 +329,7 @@ void tree_free(Tree *tree) {
 }
 
 char *tree_list(Tree *tree, const char *path) {
-    printf("tree_list\n");
+//    printf("tree_list\n");
 
     if (!is_path_valid(path)) {
         return NULL;
@@ -294,7 +337,7 @@ char *tree_list(Tree *tree, const char *path) {
 
     Node *node = get_node(tree->root, path, READER_BEGIN, true);
     if (!node) {
-        get_node(tree->root, path, READER_END, true);
+//        get_node(tree->root, path, READER_END, true);
         return NULL;
     }
 
@@ -310,7 +353,7 @@ char *tree_list(Tree *tree, const char *path) {
 }
 
 int tree_create(Tree *tree, const char *path) {
-    printf("tree_create\n");
+//    printf("tree_create\n");
     if (!is_path_valid(path)) {
         return EINVAL;
     }
@@ -321,40 +364,10 @@ int tree_create(Tree *tree, const char *path) {
     char *new_node_name = malloc(sizeof(char) * (MAX_FOLDER_NAME_LENGTH + 1));
     char *path_to_parent = make_path_to_parent(path, new_node_name);
 
-    char *parent_name = malloc(sizeof(char) * (MAX_FOLDER_NAME_LENGTH + 1));
-    char *path_to_grandparent = make_path_to_parent(path_to_parent, parent_name);
-
-    Node *parent;
-    Node *grandparent;
-
-//    printf("a\n");
-    if (!strcmp(path_to_parent, "/")) {
-        grandparent = NULL;
-        parent = tree->root;
-    }
-    else {
-        grandparent = get_node(tree->root, path_to_grandparent, READER_BEGIN, true);
-        if (!grandparent) {
-            get_node(tree->root, path_to_grandparent, READER_END, true);
-            free(new_node_name);
-            free(parent_name);
-            free(path_to_parent);
-            free(path_to_grandparent);
-            return ENOENT;
-        }
-        else {
-            writer_beginning_protocol(grandparent);
-            parent = hmap_get(grandparent->children, parent_name);
-        }
-    }
-//    printf("b\n");
-
+    Node *parent = get_node(tree->root, path_to_parent, READER_BEGIN, true);
     if (!parent) {
         free(new_node_name);
-        if (grandparent) {
-            get_node(tree->root, path_to_grandparent, READER_END, true);
-            writer_ending_protocol(grandparent);
-        }
+//        get_node(tree->root, path_to_parent, READER_END, true);
         free(path_to_parent);
         return ENOENT;
     }
@@ -373,23 +386,98 @@ int tree_create(Tree *tree, const char *path) {
         node_destroy(new_node);
     }
 
-//    printf("c\n");
-
     writer_ending_protocol(parent);
-    if (grandparent != NULL) {
-        writer_ending_protocol(grandparent);
-        get_node(tree->root, path_to_grandparent, READER_END, true);
-    }
-//    printf("co\n");
+//    if (parent->parent != NULL) {
+//        writer_ending_protocol(parent->parent);
+//        reader_beginning_protocol(parent->parent);
+//    }
+    get_node(tree->root, path_to_parent, READER_END, true);
     free(path_to_parent);
-    free(path_to_grandparent);
-    free(parent_name);
 //    printf("tree_create: %d\n", err);
     return err;
 }
+//
+//int tree_create(Tree *tree, const char *path) {
+//    printf("tree_create\n");
+//    if (!is_path_valid(path)) {
+//        return EINVAL;
+//    }
+//    if (!strcmp(path, "/")) {
+//        return EEXIST;
+//    }
+//
+//    char *new_node_name = malloc(sizeof(char) * (MAX_FOLDER_NAME_LENGTH + 1));
+//    char *path_to_parent = make_path_to_parent(path, new_node_name);
+//
+//    char *parent_name = malloc(sizeof(char) * (MAX_FOLDER_NAME_LENGTH + 1));
+//    char *path_to_grandparent = make_path_to_parent(path_to_parent, parent_name);
+//
+//    Node *parent;
+//    Node *grandparent;
+//
+////    printf("a\n");
+//    if (!strcmp(path_to_parent, "/")) {
+//        grandparent = NULL;
+//        parent = tree->root;
+//    }
+//    else {
+//        grandparent = get_node(tree->root, path_to_grandparent, READER_BEGIN, true);
+//        if (!grandparent) {
+//            get_node(tree->root, path_to_grandparent, READER_END, true);
+//            free(new_node_name);
+//            free(parent_name);
+//            free(path_to_parent);
+//            free(path_to_grandparent);
+//            return ENOENT;
+//        }
+//        else {
+//            writer_beginning_protocol(grandparent);
+//            parent = hmap_get(grandparent->children, parent_name);
+//        }
+//    }
+////    printf("b\n");
+//
+//    if (!parent) {
+//        free(new_node_name);
+//        if (grandparent) {
+//            get_node(tree->root, path_to_grandparent, READER_END, true);
+//            writer_ending_protocol(grandparent);
+//        }
+//        free(path_to_parent);
+//        return ENOENT;
+//    }
+//
+////    if (parent->parent != NULL) {
+////        reader_ending_protocol(parent->parent);
+////        writer_beginning_protocol(parent->parent);
+////    }
+//    writer_beginning_protocol(parent);
+//
+//    Node *new_node = node_new();
+//    new_node->parent = parent;
+//    int err = add_child(parent, new_node, new_node_name);
+//    free(new_node_name); // TODO ????
+//    if (err != 0) {
+//        node_destroy(new_node);
+//    }
+//
+////    printf("c\n");
+//
+//    writer_ending_protocol(parent);
+//    if (grandparent != NULL) {
+//        writer_ending_protocol(grandparent);
+//        get_node(tree->root, path_to_grandparent, READER_END, true);
+//    }
+////    printf("co\n");
+//    free(path_to_parent);
+//    free(path_to_grandparent);
+//    free(parent_name);
+////    printf("tree_create: %d\n", err);
+//    return err;
+//}
 
 int tree_remove(Tree *tree, const char *path) {
-    printf("tree_remove\n");
+//    printf("tree_remove\n");
     if (!is_path_valid(path)) {
         return EINVAL;
     }
@@ -405,7 +493,7 @@ int tree_remove(Tree *tree, const char *path) {
 //    printf("get_node done\n");
     if (!parent) {
         free(child_name);
-        get_node(tree->root, path_to_parent, READER_END, true);
+//        get_node(tree->root, path_to_parent, READER_END, true);
         free(path_to_parent);
         return ENOENT;
     }
@@ -461,7 +549,7 @@ void unlock_subtree(Node *node, bool first) {
 }
 
 int tree_move(Tree *tree, const char *source, const char *target) {
-    printf("tree_move: %s, %s\n", source, target);
+//    printf("tree_move: %s, %s\n", source, target);
     if (!is_path_valid(source) || !is_path_valid(target)) {
         return EINVAL;
     }
