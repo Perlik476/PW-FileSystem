@@ -361,12 +361,11 @@ int tree_create(Tree *tree, const char *path) {
         return EEXIST;
     }
 
-    char *new_node_name = malloc(sizeof(char) * (MAX_FOLDER_NAME_LENGTH + 1));
+    char new_node_name[MAX_FOLDER_NAME_LENGTH + 1];
     char *path_to_parent = make_path_to_parent(path, new_node_name);
 
     Node *parent = get_node(tree->root, path_to_parent, READER_BEGIN, true);
     if (!parent) {
-        free(new_node_name);
 //        get_node(tree->root, path_to_parent, READER_END, true);
         free(path_to_parent);
         return ENOENT;
@@ -381,7 +380,6 @@ int tree_create(Tree *tree, const char *path) {
     Node *new_node = node_new();
     new_node->parent = parent;
     int err = add_child(parent, new_node, new_node_name);
-    free(new_node_name); // TODO ????
     if (err != 0) {
         node_destroy(new_node);
     }
@@ -396,85 +394,7 @@ int tree_create(Tree *tree, const char *path) {
 //    printf("tree_create: %d\n", err);
     return err;
 }
-//
-//int tree_create(Tree *tree, const char *path) {
-//    printf("tree_create\n");
-//    if (!is_path_valid(path)) {
-//        return EINVAL;
-//    }
-//    if (!strcmp(path, "/")) {
-//        return EEXIST;
-//    }
-//
-//    char *new_node_name = malloc(sizeof(char) * (MAX_FOLDER_NAME_LENGTH + 1));
-//    char *path_to_parent = make_path_to_parent(path, new_node_name);
-//
-//    char *parent_name = malloc(sizeof(char) * (MAX_FOLDER_NAME_LENGTH + 1));
-//    char *path_to_grandparent = make_path_to_parent(path_to_parent, parent_name);
-//
-//    Node *parent;
-//    Node *grandparent;
-//
-////    printf("a\n");
-//    if (!strcmp(path_to_parent, "/")) {
-//        grandparent = NULL;
-//        parent = tree->root;
-//    }
-//    else {
-//        grandparent = get_node(tree->root, path_to_grandparent, READER_BEGIN, true);
-//        if (!grandparent) {
-//            get_node(tree->root, path_to_grandparent, READER_END, true);
-//            free(new_node_name);
-//            free(parent_name);
-//            free(path_to_parent);
-//            free(path_to_grandparent);
-//            return ENOENT;
-//        }
-//        else {
-//            writer_beginning_protocol(grandparent);
-//            parent = hmap_get(grandparent->children, parent_name);
-//        }
-//    }
-////    printf("b\n");
-//
-//    if (!parent) {
-//        free(new_node_name);
-//        if (grandparent) {
-//            get_node(tree->root, path_to_grandparent, READER_END, true);
-//            writer_ending_protocol(grandparent);
-//        }
-//        free(path_to_parent);
-//        return ENOENT;
-//    }
-//
-////    if (parent->parent != NULL) {
-////        reader_ending_protocol(parent->parent);
-////        writer_beginning_protocol(parent->parent);
-////    }
-//    writer_beginning_protocol(parent);
-//
-//    Node *new_node = node_new();
-//    new_node->parent = parent;
-//    int err = add_child(parent, new_node, new_node_name);
-//    free(new_node_name); // TODO ????
-//    if (err != 0) {
-//        node_destroy(new_node);
-//    }
-//
-////    printf("c\n");
-//
-//    writer_ending_protocol(parent);
-//    if (grandparent != NULL) {
-//        writer_ending_protocol(grandparent);
-//        get_node(tree->root, path_to_grandparent, READER_END, true);
-//    }
-////    printf("co\n");
-//    free(path_to_parent);
-//    free(path_to_grandparent);
-//    free(parent_name);
-////    printf("tree_create: %d\n", err);
-//    return err;
-//}
+
 
 int tree_remove(Tree *tree, const char *path) {
 //    printf("tree_remove\n");
@@ -485,14 +405,13 @@ int tree_remove(Tree *tree, const char *path) {
         return EBUSY;
     }
 
-    char *child_name = malloc(sizeof(char) * (MAX_FOLDER_NAME_LENGTH + 1));
+    char child_name[MAX_FOLDER_NAME_LENGTH + 1];;
     char *path_to_parent = make_path_to_parent(path, child_name);
 
 //    printf("get_node start\n");
     Node *parent = get_node(tree->root, path_to_parent, READER_BEGIN, true);
 //    printf("get_node done\n");
     if (!parent) {
-        free(child_name);
 //        get_node(tree->root, path_to_parent, READER_END, true);
         free(path_to_parent);
         return ENOENT;
@@ -505,7 +424,6 @@ int tree_remove(Tree *tree, const char *path) {
 
     int err = remove_child(parent, child_name);
     get_node(tree->root, path_to_parent, READER_END, true);
-    free(child_name);
     free(path_to_parent);
 
     writer_ending_protocol(parent);
