@@ -416,6 +416,7 @@ int tree_remove(Tree *tree, const char *path) {
         free(path_to_parent);
         return ENOENT;
     }
+    //
 
 //    printf("%d\n", parent->readers_count);
 //    printf("writer_beginning start\n");
