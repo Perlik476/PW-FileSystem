@@ -1,7 +1,7 @@
 // Dla każdej maski (maski są wyjaśnione w utils.h) odpala wątki wykonujące
 // losowe takie operacje.
 
-#define THREAD_COUNT 12
+#define THREAD_COUNT 2
 #define OPERATIONS_IN_THREAD 5000000
 
 #include "utils.h"

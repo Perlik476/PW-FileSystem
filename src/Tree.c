@@ -385,8 +385,6 @@ Node *get_node_real(Node *node, Node *first_node, const char *path, int type, bo
     free(next_node_name);
 
     if (!next_node) {
-        decrease_counter_until(node, first_node, lock_first);
-
         if (lock_first || first_node != node) {
             if (type == READER_BEGIN) {
                 reader_ending_protocol(node);
@@ -403,6 +401,8 @@ Node *get_node_real(Node *node, Node *first_node, const char *path, int type, bo
                 writer_ending_protocol(node);
             }
         }
+
+        decrease_counter_until(node, first_node, lock_first);
 
         return NULL;
     }
@@ -492,9 +492,9 @@ char *tree_list(Tree *tree, const char *path) {
 
 //    get_node(tree->root, path, READER_END, true);
 
-    decrease_counter_until(node, tree->root, true);
-
     reader_ending_protocol(node);
+
+    decrease_counter_until(node, tree->root, true);
 
 //    printf("tree_list end: %d\n", tree->root->count_in_subtree);
 //    assert(tree->root->count_in_subtree == 0);
@@ -541,9 +541,9 @@ int tree_create(Tree *tree, const char *path) {
 //        reader_beginning_protocol(parent->parent);
 //    }
 //    get_node(tree->root, path_to_parent, READER_END, true);
-    decrease_counter_until(parent, tree->root, true);
-
     writer_ending_protocol(parent);
+
+    decrease_counter_until(parent, tree->root, true);
 
     free(path_to_parent);
 //    printf("tree_create: %d\n", err);
@@ -588,9 +588,9 @@ int tree_remove(Tree *tree, const char *path) {
 //    get_node(tree->root, path_to_parent, READER_END, true);
     free(path_to_parent);
 
-    decrease_counter_until(parent, tree->root, true);
-
     writer_ending_protocol(parent);
+
+    decrease_counter_until(parent, tree->root, true);
 
 //    printf("tree_remove: %d\n", err);
 //    printf("tree_remove end: %d\n", tree->root->count_in_subtree);
@@ -664,13 +664,8 @@ int tree_move(Tree *tree, const char *source, const char *target) {
     Node *lca_node = get_node(tree->root, path_to_lca, READER_BEGIN, true);
     if (!lca_node) {
         free(path_to_lca);
-//        printf("tree_move end 1: %d\n", tree->root->count_in_subtree);
-//        assert(tree->root->count_in_subtree == 0);
-//        printf("xd1\n");
         return ENOENT;
     }
-
-    int a = get_counter(lca_node);
 
 //    printf("writer lca\n");
     writer_beginning_protocol(lca_node);
@@ -687,8 +682,8 @@ int tree_move(Tree *tree, const char *source, const char *target) {
     Node *source_parent_node = get_node(lca_node, path_to_source_parent, WRITER_BEGIN, false);
 //    printf("%d\n", tree->root->count_in_subtree);
     if (!source_parent_node) {
-        decrease_counter_until(lca_node, tree->root, true);
         writer_ending_protocol(lca_node);
+        decrease_counter_until(lca_node, tree->root, true);
 
         free(path_to_lca);
         free(path_to_source_parent);
@@ -722,18 +717,17 @@ int tree_move(Tree *tree, const char *source, const char *target) {
         }
     }
 
-    int b = get_counter(lca_node);
-
     Node *source_node = (Node *)hmap_get(source_parent_node->children, source_child_name);
     if (!source_node) {
 //        printf("%d\n", tree->root->count_in_subtree);
-        decrease_counter_until(source_parent_node, lca_node, false);
         if (source_parent_node != lca_node) {
             writer_ending_protocol(source_parent_node);
         }
+        decrease_counter_until(source_parent_node, lca_node, false);
+
 //        printf("%d\n", tree->root->count_in_subtree);
-        decrease_counter_until(lca_node, tree->root, true);
         writer_ending_protocol(lca_node);
+        decrease_counter_until(lca_node, tree->root, true);
 
         free(path_to_lca);
         free(path_to_source_parent);
@@ -747,13 +741,13 @@ int tree_move(Tree *tree, const char *source, const char *target) {
 ////    DOTĄD OK
 
     if (!strcmp(source, target)) {
-        decrease_counter_until(source_parent_node, lca_node, false);
         if (source_parent_node != lca_node) {
             writer_ending_protocol(source_parent_node);
         }
+        decrease_counter_until(source_parent_node, lca_node, false);
 
-        decrease_counter_until(lca_node, tree->root, true);
         writer_ending_protocol(lca_node);
+        decrease_counter_until(lca_node, tree->root, true);
 
         free(path_to_lca);
         free(path_to_source_parent);
@@ -768,7 +762,7 @@ int tree_move(Tree *tree, const char *source, const char *target) {
 //// DOTAÐ OK
 
 //    printf("writer source\n");
-    writer_beginning_protocol(source_node);
+    mover_beginning_protocol(source_node);
 
     char target_child_name[MAX_FOLDER_NAME_LENGTH + 1];
     char *path_to_target_parent = make_path_to_parent(target + diff, target_child_name);
@@ -780,13 +774,14 @@ int tree_move(Tree *tree, const char *source, const char *target) {
     target_parent_node = get_node(lca_node, path_to_target_parent, WRITER_BEGIN, false);
 
     if (!target_parent_node) {
-        decrease_counter_until(source_parent_node, lca_node, false);
         if (source_parent_node != lca_node) {
             writer_ending_protocol(source_parent_node);
         }
-        writer_ending_protocol(source_node);
-        decrease_counter_until(lca_node, tree->root, true);
+        mover_ending_protocol(source_node);
+        decrease_counter_until(source_parent_node, lca_node, false);
+
         writer_ending_protocol(lca_node);
+        decrease_counter_until(lca_node, tree->root, true);
 
 
         free(path_to_lca);
@@ -808,6 +803,7 @@ int tree_move(Tree *tree, const char *source, const char *target) {
 //        if (source_parent_node != lca_node) {
 //            writer_ending_protocol(source_parent_node);
 //        }
+//
 //        decrease_counter_until(lca_node, tree->root, true);
 //        writer_ending_protocol(lca_node);
 //
@@ -831,22 +827,25 @@ int tree_move(Tree *tree, const char *source, const char *target) {
         }
     }
 
-    int c = get_counter(lca_node);
-
 //    print_map(target_parent_node->children);
 
+//    add_child(tree->root, node_new(), "papaj");
+//    printf("papaj\n");
+
     if (!strcmp(source, target)) {
-        decrease_counter_until(target_parent_node, lca_node, false);
         if (target_parent_node != lca_node) {
             writer_ending_protocol(target_parent_node);
         }
-        decrease_counter_until(source_parent_node, lca_node, false);
-        writer_ending_protocol(source_node);
+        decrease_counter_until(target_parent_node, lca_node, false);
+
+        mover_ending_protocol(source_node);
         if (source_parent_node != lca_node) {
             writer_ending_protocol(source_parent_node);
         }
-        decrease_counter_until(lca_node, tree->root, true);
+        decrease_counter_until(source_parent_node, lca_node, false);
+
         writer_ending_protocol(lca_node);
+        decrease_counter_until(lca_node, tree->root, true);
 
         free(path_to_lca);
         free(path_to_source_parent);
@@ -866,39 +865,33 @@ int tree_move(Tree *tree, const char *source, const char *target) {
 //    printf("cyce\n");
 
     int err = add_child(target_parent_node, source_node, target_child_name);
+//    printf("dupa\n");
 
 //    unlock_subtree(source_node, true);
 
 //    printf("wadowice\n");
 
     if (!err) {
+//        printf("cyce\n");
+//        hmap_remove(source_parent_node->children, "papaj");
         hmap_remove(source_parent_node->children, source_child_name);
     }
 
 //    printf("chuj\n");
 
-    int d = get_counter(lca_node);
-
-    decrease_counter_until(target_parent_node, lca_node, false);
     if (target_parent_node != lca_node) {
         writer_ending_protocol(target_parent_node);
     }
+    decrease_counter_until(target_parent_node, lca_node, false);
 
-    int e = get_counter(lca_node);
-
-    decrease_counter_until(source_parent_node, lca_node, false);
-
-    int f = get_counter(lca_node);
-
-    writer_ending_protocol(source_node);
+    mover_ending_protocol(source_node);
     if (source_parent_node != lca_node) {
         writer_ending_protocol(source_parent_node);
     }
+    decrease_counter_until(source_parent_node, lca_node, false);
 
-    int g = get_counter(lca_node);
-
-    decrease_counter_until(lca_node, tree->root, true);
     writer_ending_protocol(lca_node);
+    decrease_counter_until(lca_node, tree->root, true);
 
     free(path_to_lca);
     free(path_to_source_parent);
