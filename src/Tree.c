@@ -650,7 +650,7 @@ int tree_remove(Tree *tree, const char *path) {
         return EBUSY;
     }
 
-    char child_name[MAX_FOLDER_NAME_LENGTH + 1];;
+    char child_name[MAX_FOLDER_NAME_LENGTH + 1];
     char *path_to_parent = make_path_to_parent(path, child_name);
 
 //    printf("get_node start\n");
