@@ -31,7 +31,6 @@ struct Node {
     pthread_cond_t readers;
     pthread_cond_t movers;
     int readers_count, readers_wait, writers_count, writers_wait, movers_count, movers_wait, count_in_subtree, who_enters;
-    bool is_removed;
 };
 
 struct Tree {
@@ -60,11 +59,10 @@ Node *node_new() {
     node->writers_count = 0;
     node->readers_wait = 0;
     node->writers_wait = 0;
-    node->who_enters = true;
+    node->who_enters = READER_ENTERS;
     node->movers_count = 0;
     node->movers_wait = 0;
     node->count_in_subtree = 0;
-    node->is_removed = false;
 
     return node;
 }
@@ -90,20 +88,63 @@ void node_destroy(Node *node) {
         syserr(err, "mutex destroy failed");
     }
     if ((err = pthread_cond_destroy(&node->movers)) != 0) {
-        syserr(err, "mutex destroy failed");
+        syserr(err, "cond movers destroy failed");
     }
 
     free(node);
 }
 
 
-void signal_mover(Node *node);
 
-void signal_mover_until(Node *node, Node *first_node);
+void increase_counter(Node *node) {
+    int err;
 
-void decrease_counter(Node *node);
+    if ((err = pthread_mutex_lock(&node->mutex)) != 0) {
+        syserr(err, "mutex lock failed");
+    }
 
-void decrease_counter_until(Node *node, Node *first_node, bool with_first);
+    node->count_in_subtree++;
+
+    if ((err = pthread_mutex_unlock(&node->mutex)) != 0) {
+        syserr(err, "mutex unlock failed");
+    }
+}
+
+
+void decrease_counter(Node *node) {
+    int err;
+
+    if ((err = pthread_mutex_lock(&node->mutex)) != 0) {
+        syserr(err, "mutex lock failed");
+    }
+
+    node->count_in_subtree--;
+    assert(node->count_in_subtree >= 0);
+
+    if (node->count_in_subtree == 0 && node->movers_wait > 0) {
+        node->who_enters = MOVER_ENTERS;
+        if ((err = pthread_cond_broadcast(&node->movers)) != 0) {
+            syserr(err, "cond movers broadcast failed");
+        }
+    }
+
+    if ((err = pthread_mutex_unlock(&node->mutex)) != 0) {
+        syserr(err, "mutex unlock failed");
+    }
+}
+
+void decrease_counter_until(Node *node, Node *first_node, bool with_first) {
+    if (node == NULL || first_node == NULL) {
+        return;
+    }
+    while (node != first_node) {
+        decrease_counter(node);
+        node = node->parent;
+    }
+    if (with_first) {
+        decrease_counter(node);
+    }
+}
 
 
 void reader_beginning_protocol(Node *node) {
@@ -121,12 +162,13 @@ void reader_beginning_protocol(Node *node) {
         }
         node->readers_wait--;
     }
+    assert(node->who_enters == READER_ENTERS);
 
     node->readers_count++;
     assert(node->readers_count >= 0 && node->writers_count == 0);
-    if (node->readers_wait == 0 && node->writers_wait > 0) {
-        node->who_enters = WRITER_ENTERS;
-    }
+//    if (node->readers_wait == 0 && node->writers_wait > 0) {
+//        node->who_enters = WRITER_ENTERS;
+//    }
 
     if ((err = pthread_mutex_unlock(&node->mutex)) != 0) {
         syserr(err, "mutex unlock failed");
@@ -154,6 +196,7 @@ void reader_ending_protocol(Node *node, Node *first_node, bool with_first) {
         node->count_in_subtree--;
         assert(node->count_in_subtree >= 0);
         if (node->count_in_subtree == 0 && node->movers_wait > 0) {
+            node->who_enters = MOVER_ENTERS;
             if ((err = pthread_cond_broadcast(&node->movers)) != 0) {
                 syserr(err, "cond movers broadcast failed");
             }
@@ -178,16 +221,16 @@ void writer_beginning_protocol(Node *node) {
 
     if (node->readers_count + node->writers_count + node->movers_count > 0) {
         node->writers_wait++;
-        while (node->readers_count + node->writers_count + node->movers_count > 0) {
+        while (node->readers_count + node->writers_count + node->movers_count > 0 || node->who_enters != WRITER_ENTERS) {
             if ((err = pthread_cond_wait(&node->writers, &node->mutex)) != 0) {
                 syserr(err, "cond writers wait failed");
             }
         }
         node->writers_wait--;
     }
+    assert(node->who_enters == WRITER_ENTERS);
 
     node->writers_count++;
-    node->who_enters = WRITER_ENTERS;
     assert(node->readers_count == 0 && node->writers_count == 1 && node->movers_count == 0);
 
     if ((err = pthread_mutex_unlock(&node->mutex)) != 0) {
@@ -224,14 +267,13 @@ void writer_ending_protocol(Node *node, Node *first_node, bool with_first) {
         node->count_in_subtree--;
         assert(node->count_in_subtree >= 0);
         if (node->count_in_subtree == 0 && node->movers_wait > 0) {
+            node->who_enters = MOVER_ENTERS;
             if ((err = pthread_cond_broadcast(&node->movers)) != 0) {
                 syserr(err, "cond movers broadcast failed");
             }
         }
     }
     decrease_counter_until(node->parent, first_node, with_first);
-
-//    signal_mover_until(node->parent, first_node);
 
     if ((err = pthread_mutex_unlock(&node->mutex)) != 0) {
         syserr(err, "mutex unlock failed");
@@ -250,17 +292,17 @@ void mover_beginning_protocol(Node *node) {
 
     if (node->count_in_subtree > 0) {
         node->movers_wait++;
-        while (node->count_in_subtree > 0) {
+        while (node->count_in_subtree > 0 || node->who_enters != MOVER_ENTERS) {
             if ((err = pthread_cond_wait(&node->movers, &node->mutex)) != 0) {
                 syserr(err, "cond movers wait failed");
             }
         }
         node->movers_wait--;
     }
+    assert(node->who_enters == MOVER_ENTERS);
 
     node->movers_count++;
-    node->who_enters = MOVER_ENTERS;
-    assert(node->readers_count == 0 && node->writers_count == 0 && node->count_in_subtree == 0);
+    assert(node->readers_count == 0 && node->writers_count == 0 && node->count_in_subtree == 0 && node->movers_count == 1);
 
     if ((err = pthread_mutex_unlock(&node->mutex)) != 0) {
         syserr(err, "mutex unlock failed");
@@ -277,28 +319,16 @@ void mover_ending_protocol(Node *node, Node *first_node, bool with_first) {
     }
 
     node->movers_count--;
-    assert(node->movers_count >= 0);
-    if (node->writers_wait > 0) {
-        node->who_enters = WRITER_ENTERS;
-        if ((err = pthread_cond_broadcast(&node->writers)) != 0) {
-            syserr(err, "cond writers broadcast failed");
-        }
-    }
-    else if (node->readers_wait > 0) {
-        node->who_enters = READER_ENTERS;
-        if ((err = pthread_cond_broadcast(&node->readers)) != 0) {
-            syserr(err, "cond readers broadcast failed");
-        }
-    }
-    else {
-        node->who_enters = READER_ENTERS;
-    }
-    assert(node->movers_wait == 0);
+    assert(node->movers_count >= 0 && node->writers_count == 0 && node->readers_count == 0);
+    assert(node->writers_wait == 0 && node->readers_wait == 0 && node->movers_wait == 0);
+
+    node->who_enters = READER_ENTERS;
 
     if (first_node != NULL) {
         node->count_in_subtree--;
         assert(node->count_in_subtree >= 0);
         if (node->count_in_subtree == 0 && node->movers_wait > 0) {
+            node->who_enters = MOVER_ENTERS;
             if ((err = pthread_cond_broadcast(&node->movers)) != 0) {
                 syserr(err, "cond movers broadcast failed");
             }
@@ -310,106 +340,6 @@ void mover_ending_protocol(Node *node, Node *first_node, bool with_first) {
         syserr(err, "mutex unlock failed");
     }
 }
-
-
-void increase_counter(Node *node) {
-    int err;
-
-    if ((err = pthread_mutex_lock(&node->mutex)) != 0) {
-        syserr(err, "mutex lock failed");
-    }
-
-    node->count_in_subtree++;
-
-    if ((err = pthread_mutex_unlock(&node->mutex)) != 0) {
-        syserr(err, "mutex unlock failed");
-    }
-}
-
-
-void decrease_counter(Node *node) {
-    int err;
-
-    if ((err = pthread_mutex_lock(&node->mutex)) != 0) {
-        syserr(err, "mutex lock failed");
-    }
-
-    node->count_in_subtree--;
-    assert(node->count_in_subtree >= 0);
-
-    if (node->count_in_subtree == 0 && node->movers_wait > 0) {
-        if ((err = pthread_cond_broadcast(&node->movers)) != 0) {
-            syserr(err, "cond movers broadcast failed");
-        }
-    }
-
-    if ((err = pthread_mutex_unlock(&node->mutex)) != 0) {
-        syserr(err, "mutex unlock failed");
-    }
-}
-
-void decrease_counter_until(Node *node, Node *first_node, bool with_first) {
-    if (node == NULL || first_node == NULL) {
-        return;
-    }
-    while (node != first_node) {
-        decrease_counter(node);
-        node = node->parent;
-    }
-    if (with_first) {
-        decrease_counter(node);
-    }
-}
-
-
-//int get_counter(Node *node) {
-//    int err;
-//
-//    if ((err = pthread_mutex_lock(&node->mutex)) != 0) {
-//        syserr(err, "mutex lock failed");
-//    }
-//
-//    int x = node->count_in_subtree;
-//
-//    if ((err = pthread_mutex_unlock(&node->mutex)) != 0) {
-//        syserr(err, "mutex unlock failed");
-//    }
-//
-//    return x;
-//}
-
-
-void signal_mover(Node *node) {
-    int err;
-
-    if ((err = pthread_mutex_lock(&node->mutex)) != 0) {
-        syserr(err, "mutex lock failed");
-    }
-
-    assert(node->count_in_subtree >= 0);
-    if (node->count_in_subtree == 0 && node->movers_wait > 0) {
-        if ((err = pthread_cond_broadcast(&node->movers)) != 0) {
-            syserr(err, "cond movers broadcast failed");
-        }
-    }
-
-    if ((err = pthread_mutex_unlock(&node->mutex)) != 0) {
-        syserr(err, "mutex unlock failed");
-    }
-}
-
-void signal_mover_until(Node *node, Node *first_node) {
-    if (node == NULL || first_node == NULL) {
-        return;
-    }
-
-    while (node != first_node) {
-        signal_mover(node);
-        node = node->parent;
-    }
-    signal_mover(node);
-}
-
 
 
 Node *get_node_real(Node *node, Node *first_node, const char *path, int type, bool lock_first) {
@@ -426,16 +356,8 @@ Node *get_node_real(Node *node, Node *first_node, const char *path, int type, bo
         if (type == READER_BEGIN) {
             reader_beginning_protocol(node);
         }
-        else if (type == READER_END) {
-            assert(false);
-//            reader_ending_protocol(node);
-        }
         else if (type == WRITER_BEGIN) {
             writer_beginning_protocol(node);
-        }
-        else if (type == WRITER_END) {
-            assert(false);
-//            writer_ending_protocol(node);
         }
     }
 
@@ -443,16 +365,8 @@ Node *get_node_real(Node *node, Node *first_node, const char *path, int type, bo
         if (type == READER_BEGIN) {
             reader_ending_protocol(node->parent, NULL, 0);
         }
-        else if (type == READER_END) {
-            assert(false);
-//            reader_ending_protocol(node);
-        }
         else if (type == WRITER_BEGIN) {
             writer_ending_protocol(node->parent, NULL, 0);
-        }
-        else if (type == WRITER_END) {
-            assert(false);
-//            writer_ending_protocol(node);
         }
     }
 
@@ -469,20 +383,10 @@ Node *get_node_real(Node *node, Node *first_node, const char *path, int type, bo
             if (type == READER_BEGIN) {
                 reader_ending_protocol(node, first_node, lock_first);
             }
-            else if (type == READER_END) {
-                assert(false);
-//                reader_ending_protocol(node);
-            }
             else if (type == WRITER_BEGIN) {
                 writer_ending_protocol(node, first_node, lock_first);
             }
-            else if (type == WRITER_END) {
-                assert(false);
-//                writer_ending_protocol(node);
-            }
         }
-
-//        signal_mover_until(node, first_node);
 
         return NULL;
     }
@@ -559,7 +463,6 @@ char *tree_list(Tree *tree, const char *path) {
 
     Node *node = get_node(tree->root, path, READER_BEGIN, true);
     if (!node) {
-//        get_node(tree->root, path, READER_END, true);
         return NULL;
     }
 
@@ -570,16 +473,7 @@ char *tree_list(Tree *tree, const char *path) {
 
     char *result = get_children_names(node);
 
-//    get_node(tree->root, path, READER_END, true);
-
-//    decrease_counter_until(node, tree->root, true);
-
     reader_ending_protocol(node, tree->root, true);
-
-//    signal_mover_until(node, tree->root);
-
-//    printf("tree_list end: %d\n", tree->root->count_in_subtree);
-//    assert(tree->root->count_in_subtree == 0);
 
     return result;
 }
@@ -601,7 +495,6 @@ int tree_create(Tree *tree, const char *path) {
 
     Node *parent = get_node(tree->root, path_to_parent, READER_BEGIN, true);
     if (!parent) {
-//        get_node(tree->root, path_to_parent, READER_END, true);
         free(path_to_parent);
         return ENOENT;
     }
@@ -618,22 +511,9 @@ int tree_create(Tree *tree, const char *path) {
         node_destroy(new_node);
     }
 
-//    if (parent->parent != NULL) {
-//        writer_ending_protocol(parent->parent);
-//        reader_beginning_protocol(parent->parent);
-//    }
-//    get_node(tree->root, path_to_parent, READER_END, true);
-//    decrease_counter_until(parent, tree->root, true);
-
     writer_ending_protocol(parent, tree->root, true);
 
-//    signal_mover_until(parent, tree->root);
-
     free(path_to_parent);
-//    printf("tree_create: %d\n", err);
-//    printf("tree_create end: %d\n", tree->root->count_in_subtree);
-//    assert(tree->root->count_in_subtree == 0);
-
     return err;
 }
 
@@ -653,15 +533,11 @@ int tree_remove(Tree *tree, const char *path) {
     char child_name[MAX_FOLDER_NAME_LENGTH + 1];
     char *path_to_parent = make_path_to_parent(path, child_name);
 
-//    printf("get_node start\n");
     Node *parent = get_node(tree->root, path_to_parent, READER_BEGIN, true);
-//    printf("get_node done\n");
     if (!parent) {
-//        get_node(tree->root, path_to_parent, READER_END, true);
         free(path_to_parent);
         return ENOENT;
     }
-    //
 
     writer_beginning_protocol(parent);
     if (parent->parent) {
@@ -669,10 +545,7 @@ int tree_remove(Tree *tree, const char *path) {
     }
 
     int err = remove_child(parent, child_name);
-//    get_node(tree->root, path_to_parent, READER_END, true);
     free(path_to_parent);
-
-//    decrease_counter_until(parent, tree->root, true);
 
     writer_ending_protocol(parent, tree->root, true);
 
@@ -682,41 +555,6 @@ int tree_remove(Tree *tree, const char *path) {
 
     return err;
 }
-
-void print_map(HashMap* map) {
-    const char* key = NULL;
-    void* value = NULL;
-    printf("Size=%zd\n", hmap_size(map));
-    HashMapIterator it = hmap_iterator(map);
-    while (hmap_next(map, &it, &key, &value)) {
-        printf("Key=%s Value=%p\n", key, value);
-    }
-    printf("\n");
-}
-
-//void lock_subtree(Node *node, bool first) {
-//    if (!first) {
-//        writer_beginning_protocol(node);
-//    }
-//    const char *key = NULL;
-//    void *value = NULL;
-//    HashMapIterator it = hmap_iterator(node->children);
-//    while (hmap_next(node->children, &it, &key, &value)) {
-//        lock_subtree(value, false);
-//    }
-//}
-//
-//void unlock_subtree(Node *node, bool first) {
-//    if (!first) {
-//        writer_ending_protocol(node);
-//    }
-//    const char *key = NULL;
-//    void *value = NULL;
-//    HashMapIterator it = hmap_iterator(node->children);
-//    while (hmap_next(node->children, &it, &key, &value)) {
-//        unlock_subtree(value, false);
-//    }
-//}
 
 int tree_move(Tree *tree, const char *source, const char *target) {
 //    printf("tree_move: %s, %s\n", source, target);
@@ -734,67 +572,37 @@ int tree_move(Tree *tree, const char *source, const char *target) {
     }
 
     if (is_substring(source, target)) {
-//        free(source_child_name);
-//        free(path_to_source_parent);
-//        free(target_child_name);
-//        free(path_to_target_parent);
         return -1;
     }
 
     char *path_to_lca = make_path_to_lca(source, target);
     size_t diff = strlen(path_to_lca) - 1;
 
-//    printf("get_lca: %s\n", path_to_lca);
     Node *lca_node = get_node(tree->root, path_to_lca, READER_BEGIN, true);
     if (!lca_node) {
         free(path_to_lca);
         return ENOENT;
     }
 
-//    printf("writer lca\n");
     writer_beginning_protocol(lca_node);
     if (lca_node->parent) {
         reader_ending_protocol(lca_node->parent, NULL, 0);
     }
 
-//    printf("%s\n", (source + diff));
     char source_child_name[MAX_FOLDER_NAME_LENGTH + 1];
     char *path_to_source_parent = make_path_to_parent(source + diff, source_child_name);
 
-//    printf("get source parent \n");
-//    printf("%d\n", tree->root->count_in_subtree);
     Node *source_parent_node = get_node(lca_node, path_to_source_parent, WRITER_BEGIN, false);
-//    printf("%d\n", tree->root->count_in_subtree);
     if (!source_parent_node) {
         writer_ending_protocol(lca_node, tree->root, true);
-//        decrease_counter_until(lca_node, tree->root, true);
 
         free(path_to_lca);
         free(path_to_source_parent);
 
-//        printf("tree_move end 2: %d\n", tree->root->count_in_subtree);
-//        assert(tree->root->count_in_subtree == 0);
-
         return ENOENT;
     }
-//    else {
-//        decrease_counter_until(source_parent_node, lca_node, false);
-//        if (source_parent_node->parent && source_parent_node->parent != lca_node && source_parent_node != lca_node) {
-//            writer_ending_protocol(source_parent_node->parent);
-//        }
-//
-//        decrease_counter_until(lca_node, tree->root, true);
-//        writer_ending_protocol(lca_node);
-//
-//        free(path_to_lca);
-//        free(path_to_source_parent);
-//
-//        return 0;
-//    }
-
 
     if (source_parent_node != lca_node) {
-//        printf("writer source parent\n");
         writer_beginning_protocol(source_parent_node);
         if (source_parent_node->parent && source_parent_node->parent != lca_node) {
             writer_ending_protocol(source_parent_node->parent, NULL, 0);
@@ -803,172 +611,99 @@ int tree_move(Tree *tree, const char *source, const char *target) {
 
     Node *source_node = (Node *)hmap_get(source_parent_node->children, source_child_name);
     if (!source_node) {
-//        printf("%d\n", tree->root->count_in_subtree);
         if (source_parent_node != lca_node) {
             writer_ending_protocol(source_parent_node, lca_node, false);
         }
-//        decrease_counter_until(source_parent_node, lca_node, false);
-
-//        printf("%d\n", tree->root->count_in_subtree);
         writer_ending_protocol(lca_node, tree->root, true);
-//        decrease_counter_until(lca_node, tree->root, true);
 
         free(path_to_lca);
         free(path_to_source_parent);
 
-//        printf("tree_move end 3: %d\n", tree->root->count_in_subtree);
-//        assert(tree->root->count_in_subtree == 0);
-
         return ENOENT;
     }
 
-////    DOTĄD OK
 
     if (!strcmp(source, target)) {
         if (source_parent_node != lca_node) {
             writer_ending_protocol(source_parent_node, lca_node, false);
         }
-//        decrease_counter_until(source_parent_node, lca_node, false);
 
         writer_ending_protocol(lca_node, tree->root, true);
-//        decrease_counter_until(lca_node, tree->root, true);
 
         free(path_to_lca);
         free(path_to_source_parent);
 
-//        printf("tree_move end 4: %d\n", tree->root->count_in_subtree);
-//        assert(tree->root->count_in_subtree == 0);
-
         return 0;
     }
 
-
-//// DOTAÐ OK
-
-//    printf("writer source\n");
     mover_beginning_protocol(source_node);
 
     char target_child_name[MAX_FOLDER_NAME_LENGTH + 1];
     char *path_to_target_parent = make_path_to_parent(target + diff, target_child_name);
 
-//    printf("target_child_name: %s\n", target_child_name);
-
-//    printf("get target parent: %s\n", path_to_target_parent);
     Node *target_parent_node;
     target_parent_node = get_node(lca_node, path_to_target_parent, WRITER_BEGIN, false);
 
     if (!target_parent_node) {
         mover_ending_protocol(source_node, NULL, 0);
+
         if (source_parent_node != lca_node) {
             writer_ending_protocol(source_parent_node, lca_node, false);
         }
-//        decrease_counter_until(source_parent_node, lca_node, false);
 
         writer_ending_protocol(lca_node, tree->root, true);
-//        decrease_counter_until(lca_node, tree->root, true);
 
 
         free(path_to_lca);
         free(path_to_source_parent);
         free(path_to_target_parent);
 
-//        printf("tree_move end 5: %d\n", tree->root->count_in_subtree);
-//        assert(tree->root->count_in_subtree == 0);
-
         return ENOENT;
     }
-//    else {
-//        if (target_parent_node && target_parent_node->parent != lca_node && target_parent_node != lca_node) {
-//            writer_ending_protocol(target_parent_node->parent);
-//        }
-//
-//        writer_ending_protocol(source_node);
-//        decrease_counter_until(source_parent_node, lca_node, false);
-//        if (source_parent_node != lca_node) {
-//            writer_ending_protocol(source_parent_node);
-//        }
-//
-//        decrease_counter_until(lca_node, tree->root, true);
-//        writer_ending_protocol(lca_node);
-//
-//
-//        free(path_to_lca);
-//        free(path_to_source_parent);
-//        free(path_to_target_parent);
-//
-//        return 0;
-//    }
 
-//// DOTĄD OK
-
-//    printf("dupa\n");
 
     if (target_parent_node != lca_node) {
-//        printf("writer target parent\n");
         writer_beginning_protocol(target_parent_node);
         if (target_parent_node && target_parent_node->parent != lca_node) {
             writer_ending_protocol(target_parent_node->parent, NULL, 0);
         }
     }
 
-//    print_map(target_parent_node->children);
-
-//    add_child(tree->root, node_new(), "papaj");
-//    printf("papaj\n");
-
     if (!strcmp(source, target)) {
+        mover_ending_protocol(source_node, NULL, 0);
+
         if (target_parent_node != lca_node) {
             writer_ending_protocol(target_parent_node, lca_node, false);
         }
-//        decrease_counter_until(target_parent_node, lca_node, false);
 
-        mover_ending_protocol(source_node, NULL, 0);
         if (source_parent_node != lca_node) {
             writer_ending_protocol(source_parent_node, lca_node, false);
         }
-//        decrease_counter_until(source_parent_node, lca_node, false);
 
         writer_ending_protocol(lca_node, tree->root, true);
-//        decrease_counter_until(lca_node, tree->root, true);
 
         free(path_to_lca);
         free(path_to_source_parent);
         free(path_to_target_parent);
 
-//        printf("tree_move end 6: %d\n", tree->root->count_in_subtree);
-//        assert(tree->root->count_in_subtree == 0);
-
-//        printf("beka\n");
         return 0;
     }
 
-    //// DOTĄD OK
-
-//    lock_subtree(source_node, true);
-
-//    printf("cyce\n");
-
     int err = add_child(target_parent_node, source_node, target_child_name);
-//    printf("dupa\n");
-
-//    unlock_subtree(source_node, true);
-
-//    printf("wadowice\n");
+//    int err = -1;
+//    for (int i = 1; i < 1000; i++) {}
 
     if (!err) {
-//        printf("cyce\n");
-//        hmap_remove(source_parent_node->children, "papaj");
         hmap_remove(source_parent_node->children, source_child_name);
     }
 
-//    printf("chuj\n");
+    mover_ending_protocol(source_node, NULL, 0);
 
     if (target_parent_node != lca_node) {
         writer_ending_protocol(target_parent_node, lca_node, false);
     }
 //    decrease_counter_until(target_parent_node, lca_node, false);
 
-    mover_ending_protocol(source_node, NULL, 0);
     if (source_parent_node != lca_node) {
         writer_ending_protocol(source_parent_node, lca_node, false);
     }
