@@ -133,17 +133,48 @@ void decrease_counter(Node *node) {
     }
 }
 
+//void signal_mover(Node *node) {
+//    int err;
+//
+//    if ((err = pthread_mutex_lock(&node->mutex)) != 0) {
+//        syserr(err, "mutex lock failed");
+//    }
+//
+//    assert(node->count_in_subtree >= 0);
+//    if (node->count_in_subtree == 0 && node->movers_wait > 0) {
+//        node->who_enters = MOVER_ENTERS;
+//        if ((err = pthread_cond_broadcast(&node->movers)) != 0) {
+//            syserr(err, "cond movers broadcast failed");
+//        }
+//    }
+//
+//    if ((err = pthread_mutex_unlock(&node->mutex)) != 0) {
+//        syserr(err, "mutex unlock failed");
+//    }
+//}
+
 void decrease_counter_until(Node *node, Node *first_node, bool with_first) {
     if (node == NULL || first_node == NULL) {
         return;
     }
+
+//    Node *og_node = node;
+    Node *parent;
     while (node != first_node) {
+        parent = node->parent;
         decrease_counter(node);
-        node = node->parent;
+        node = parent;
     }
     if (with_first) {
         decrease_counter(node);
     }
+
+//    node = og_node;
+//
+//    while (node != first_node) {
+//        signal_mover(node);
+//        node = node->parent;
+//    }
 }
 
 
@@ -636,8 +667,6 @@ int tree_move(Tree *tree, const char *source, const char *target) {
         return 0;
     }
 
-    mover_beginning_protocol(source_node);
-
     char target_child_name[MAX_FOLDER_NAME_LENGTH + 1];
     char *path_to_target_parent = make_path_to_parent(target + diff, target_child_name);
 
@@ -645,8 +674,6 @@ int tree_move(Tree *tree, const char *source, const char *target) {
     target_parent_node = get_node(lca_node, path_to_target_parent, WRITER_BEGIN, false);
 
     if (!target_parent_node) {
-        mover_ending_protocol(source_node, NULL, 0);
-
         if (source_parent_node != lca_node) {
             writer_ending_protocol(source_parent_node, lca_node, false);
         }
@@ -664,30 +691,12 @@ int tree_move(Tree *tree, const char *source, const char *target) {
 
     if (target_parent_node != lca_node) {
         writer_beginning_protocol(target_parent_node);
-        if (target_parent_node && target_parent_node->parent != lca_node) {
+        if (target_parent_node->parent && target_parent_node->parent != lca_node) {
             writer_ending_protocol(target_parent_node->parent, NULL, 0);
         }
     }
 
-    if (!strcmp(source, target)) {
-        mover_ending_protocol(source_node, NULL, 0);
-
-        if (target_parent_node != lca_node) {
-            writer_ending_protocol(target_parent_node, lca_node, false);
-        }
-
-        if (source_parent_node != lca_node) {
-            writer_ending_protocol(source_parent_node, lca_node, false);
-        }
-
-        writer_ending_protocol(lca_node, tree->root, true);
-
-        free(path_to_lca);
-        free(path_to_source_parent);
-        free(path_to_target_parent);
-
-        return 0;
-    }
+    mover_beginning_protocol(source_node);
 
     int err = add_child(target_parent_node, source_node, target_child_name);
 //    int err = -1;
@@ -699,28 +708,19 @@ int tree_move(Tree *tree, const char *source, const char *target) {
 
     mover_ending_protocol(source_node, NULL, 0);
 
-    if (target_parent_node != lca_node) {
-        writer_ending_protocol(target_parent_node, lca_node, false);
-    }
-//    decrease_counter_until(target_parent_node, lca_node, false);
-
     if (source_parent_node != lca_node) {
         writer_ending_protocol(source_parent_node, lca_node, false);
     }
-//    decrease_counter_until(source_parent_node, lca_node, false);
+
+    if (target_parent_node != lca_node) {
+        writer_ending_protocol(target_parent_node, lca_node, false);
+    }
 
     writer_ending_protocol(lca_node, tree->root, true);
-//    decrease_counter_until(lca_node, tree->root, true);
 
     free(path_to_lca);
     free(path_to_source_parent);
     free(path_to_target_parent);
-
-
-//    printf("koniec\n");
-
-//    printf("tree_move end: %d\n", tree->root->count_in_subtree);
-//    assert(tree->root->count_in_subtree == 0);
 
     return err;
 }
