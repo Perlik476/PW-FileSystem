@@ -133,32 +133,12 @@ void decrease_counter(Node *node) {
     }
 }
 
-//void signal_mover(Node *node) {
-//    int err;
-//
-//    if ((err = pthread_mutex_lock(&node->mutex)) != 0) {
-//        syserr(err, "mutex lock failed");
-//    }
-//
-//    assert(node->count_in_subtree >= 0);
-//    if (node->count_in_subtree == 0 && node->movers_wait > 0) {
-//        node->who_enters = MOVER_ENTERS;
-//        if ((err = pthread_cond_broadcast(&node->movers)) != 0) {
-//            syserr(err, "cond movers broadcast failed");
-//        }
-//    }
-//
-//    if ((err = pthread_mutex_unlock(&node->mutex)) != 0) {
-//        syserr(err, "mutex unlock failed");
-//    }
-//}
 
 void decrease_counter_until(Node *node, Node *first_node, bool with_first) {
     if (node == NULL || first_node == NULL) {
         return;
     }
 
-//    Node *og_node = node;
     Node *parent;
     while (node != first_node) {
         parent = node->parent;
@@ -168,13 +148,6 @@ void decrease_counter_until(Node *node, Node *first_node, bool with_first) {
     if (with_first) {
         decrease_counter(node);
     }
-
-//    node = og_node;
-//
-//    while (node != first_node) {
-//        signal_mover(node);
-//        node = node->parent;
-//    }
 }
 
 
@@ -197,9 +170,6 @@ void reader_beginning_protocol(Node *node) {
 
     node->readers_count++;
     assert(node->readers_count >= 0 && node->writers_count == 0);
-//    if (node->readers_wait == 0 && node->writers_wait > 0) {
-//        node->who_enters = WRITER_ENTERS;
-//    }
 
     if ((err = pthread_mutex_unlock(&node->mutex)) != 0) {
         syserr(err, "mutex unlock failed");
@@ -623,7 +593,7 @@ int tree_move(Tree *tree, const char *source, const char *target) {
     char source_child_name[MAX_FOLDER_NAME_LENGTH + 1];
     char *path_to_source_parent = make_path_to_parent(source + diff, source_child_name);
 
-    Node *source_parent_node = get_node(lca_node, path_to_source_parent, WRITER_BEGIN, false);
+    Node *source_parent_node = get_node(lca_node, path_to_source_parent, READER_BEGIN, false);
     if (!source_parent_node) {
         writer_ending_protocol(lca_node, tree->root, true);
 
@@ -636,7 +606,7 @@ int tree_move(Tree *tree, const char *source, const char *target) {
     if (source_parent_node != lca_node) {
         writer_beginning_protocol(source_parent_node);
         if (source_parent_node->parent && source_parent_node->parent != lca_node) {
-            writer_ending_protocol(source_parent_node->parent, NULL, 0);
+            reader_ending_protocol(source_parent_node->parent, NULL, 0);
         }
     }
 
@@ -671,7 +641,7 @@ int tree_move(Tree *tree, const char *source, const char *target) {
     char *path_to_target_parent = make_path_to_parent(target + diff, target_child_name);
 
     Node *target_parent_node;
-    target_parent_node = get_node(lca_node, path_to_target_parent, WRITER_BEGIN, false);
+    target_parent_node = get_node(lca_node, path_to_target_parent, READER_BEGIN, false);
 
     if (!target_parent_node) {
         if (source_parent_node != lca_node) {
@@ -692,7 +662,7 @@ int tree_move(Tree *tree, const char *source, const char *target) {
     if (target_parent_node != lca_node) {
         writer_beginning_protocol(target_parent_node);
         if (target_parent_node->parent && target_parent_node->parent != lca_node) {
-            writer_ending_protocol(target_parent_node->parent, NULL, 0);
+            reader_ending_protocol(target_parent_node->parent, NULL, 0);
         }
     }
 
