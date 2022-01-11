@@ -650,7 +650,6 @@ int tree_move(Tree *tree, const char *source, const char *target) {
 
         writer_ending_protocol(lca_node, tree->root, true);
 
-
         free(path_to_lca);
         free(path_to_source_parent);
         free(path_to_target_parent);
@@ -666,27 +665,32 @@ int tree_move(Tree *tree, const char *source, const char *target) {
         }
     }
 
+    if (source_parent_node != lca_node && target_parent_node != lca_node) {
+        writer_ending_protocol(lca_node, NULL, false);
+    }
+
     mover_beginning_protocol(source_node);
 
     int err = add_child(target_parent_node, source_node, target_child_name);
-//    int err = -1;
-//    for (int i = 1; i < 1000; i++) {}
 
     if (!err) {
         hmap_remove(source_parent_node->children, source_child_name);
     }
 
-    mover_ending_protocol(source_node, NULL, 0);
+    mover_ending_protocol(source_node, NULL, false);
 
-    if (source_parent_node != lca_node) {
-        writer_ending_protocol(source_parent_node, lca_node, false);
+    if (source_parent_node == lca_node) {
+        if (source_parent_node != target_parent_node) {
+            writer_ending_protocol(target_parent_node, lca_node, false);
+        }
+        writer_ending_protocol(source_parent_node, tree->root, true);
     }
-
-    if (target_parent_node != lca_node) {
-        writer_ending_protocol(target_parent_node, lca_node, false);
+    else { //if (target_parent_node == lca_node) {
+        if (source_parent_node != target_parent_node) {
+            writer_ending_protocol(source_parent_node, lca_node, false);
+        }
+        writer_ending_protocol(target_parent_node, tree->root, true);
     }
-
-    writer_ending_protocol(lca_node, tree->root, true);
 
     free(path_to_lca);
     free(path_to_source_parent);
