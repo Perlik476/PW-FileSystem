@@ -5,19 +5,53 @@
 #include "HashMap.h"
 #include "path_utils.h"
 #include "string.h"
-#include "stdio.h"
 #include "err.h"
 #include <pthread.h>
 #include <assert.h>
 
+// kod błędu zwracany w operacji tree_move w przypadku, gdy miałoby być wykonane przeniesienie folderu do folderu
+// w jego poddrzewie
+#define ESRCSUBTRGT -1
+
 #define READER_BEGIN 1
-#define READER_END 2
-#define WRITER_BEGIN 3
-#define WRITER_END 4
+#define WRITER_BEGIN 2
 
 #define WRITER_ENTERS 0
 #define READER_ENTERS 1
 #define MOVER_ENTERS 2
+
+/**
+ * Opis synchronizacji:
+ * Sprowadzamy problem do lekko zmodyfikowanego problemu czytelników i pisarzy. Modyfikacja polega na tym, że wprowadzamy
+ * nowy typ wątku - mover - jest on wołany dopiero, gdy w poddrzewie nie ma żadnych pisarzy i czytelników. Liczba
+ * aktywnych wątków w poddrzewie jest zliczana w zmiennej w każdym wierzchołku. Po skończeniu wykonywania operacji
+ * idziemy w górę drzewa do korzenia zmniejszając w każdym wierzchołku liczbę aktywnych wątków w poddrzewie. Jeśli
+ * licznik osiąga wartość zero i jakiś mover czeka, to go budzimy.
+ *
+ * Wszystkie operacje przechodzą po drzewie jako czytelnik w aktualnym wierzchołku i jego rodzicu (jeśli istnieje).
+ * Przechodząc do syna aktualnego wierzchołka, wychodzimy z czytelni w jego rodzicu.
+ *
+ * Tree_list:
+ * Przechodzimy po drzewie jak wyżej w poszukiwaniu odpowiedniego wierzchołka, gdy go znajdziemy to jesteśmy jako
+ * czytelnik w nim i zaprzestajemy bycie czytelnikiem w rodzicu. Sczytujemy dzieci i je wypisujemy, a następnie wychodzimy
+ * z czytelni.
+ *
+ * Tree_insert:
+ * Przechodzimy po drzewie w poszukiwaniu wierzchołka, do którego chcemy dodać nowy wierzchołek. Ustawiamy się w nim jako
+ * pisarz i ojciec opuszcza czytelnię. Wstawiamy nowy wierzchołek jako dziecko i opuszczamy czytelnie.
+ *
+ * Tree_remove:
+ * Analogicznie, jesteśmy jako pisarz w rodzicu wierzchołka, który chcemy usunąć oraz w tym wierzchołku. Po usunięciu
+ * zwalniamy czytelnię.
+ *
+ * Tree_move:
+ * Najpierw znajdujemy LCA ojców source i target. Zajmujemy je jako pisarz w celu wyeliminowania potencjalnych
+ * deadlocków, np. sytuacji, w której wykonujemy współbieżnie Tree_move(a, b), Tree_move(b, a).
+ * Następnie przechodzimy do ojca source jako pisarz, następnie do ojca target jako pisarz, zwalniamy czytelnię LCA,
+ * i czekamy jako mover na wierzchołku source. Gdy zostanie on obudzony, wykonujemy przeniesienie z source do target i
+ * zwalniamy czytelnie source, ojca source i ojca target.
+ *
+ */
 
 
 typedef struct Node Node;
@@ -69,6 +103,10 @@ Node *node_new() {
 
 void node_destroy(Node *node) {
     assert(node->count_in_subtree == 0);
+    assert(node->readers_count == 0 && node->readers_wait == 0);
+    assert((node->writers_count == 0 || node->writers_count == 1) && node->writers_wait == 0);
+    assert(node->movers_count == 0 && node->movers_wait == 0);
+
     const char *key = NULL;
     void *value = NULL;
     HashMapIterator it = hmap_iterator(node->children);
@@ -167,6 +205,10 @@ void reader_beginning_protocol(Node *node) {
         node->readers_wait--;
     }
     assert(node->who_enters == READER_ENTERS);
+
+    if (node->readers_wait == 0 && node->writers_wait > 0) {
+        node->who_enters = WRITER_ENTERS;
+    }
 
     node->readers_count++;
     assert(node->readers_count >= 0 && node->writers_count == 0);
@@ -344,7 +386,6 @@ void mover_ending_protocol(Node *node, Node *first_node, bool with_first) {
 
 
 Node *get_node_real(Node *node, Node *first_node, const char *path, int type, bool lock_first) {
-//    printf("%s\n", path);
     if (lock_first || first_node != node) {
         increase_counter(node);
     }
@@ -378,8 +419,6 @@ Node *get_node_real(Node *node, Node *first_node, const char *path, int type, bo
     free(next_node_name);
 
     if (!next_node) {
-//        decrease_counter_until(node, first_node, lock_first);
-
         if (lock_first || first_node != node) {
             if (type == READER_BEGIN) {
                 reader_ending_protocol(node, first_node, lock_first);
@@ -414,7 +453,6 @@ int add_child(Node *parent, Node *child, const char *child_name) {
 
 
 int remove_child(Node *parent, const char *child_name) {
-//    printf("remove_child\n");
     Node *node = hmap_get(parent->children, child_name);
 
     if (!node) {
@@ -435,7 +473,6 @@ int remove_child(Node *parent, const char *child_name) {
 }
 
 char *get_children_names(Node *node) {
-//    printf("xd\n");
     return make_map_contents_string(node->children);
 }
 
@@ -447,17 +484,12 @@ Tree *tree_new() {
 }
 
 void tree_free(Tree *tree) {
-//    printf("%d\n", tree->root->count_in_subtree);
     assert(tree->root->count_in_subtree == 0);
     node_destroy(tree->root);
     free(tree);
 }
 
 char *tree_list(Tree *tree, const char *path) {
-//    printf("tree_list begin: %d\n", tree->root->count_in_subtree);
-//    assert(tree->root->count_in_subtree == 0);
-//    printf("tree_list\n");
-
     if (!is_path_valid(path)) {
         return NULL;
     }
@@ -480,10 +512,6 @@ char *tree_list(Tree *tree, const char *path) {
 }
 
 int tree_create(Tree *tree, const char *path) {
-//    printf("tree_create\n");
-//    printf("tree_create begin: %d\n", tree->root->count_in_subtree);
-//    assert(tree->root->count_in_subtree == 0);
-
     if (!is_path_valid(path)) {
         return EINVAL;
     }
@@ -520,10 +548,6 @@ int tree_create(Tree *tree, const char *path) {
 
 
 int tree_remove(Tree *tree, const char *path) {
-//    printf("tree_remove\n");
-//    printf("tree_remove begin: %d\n", tree->root->count_in_subtree);
-//    assert(tree->root->count_in_subtree == 0);
-
     if (!is_path_valid(path)) {
         return EINVAL;
     }
@@ -550,18 +574,10 @@ int tree_remove(Tree *tree, const char *path) {
 
     writer_ending_protocol(parent, tree->root, true);
 
-//    printf("tree_remove: %d\n", err);
-//    printf("tree_remove end: %d\n", tree->root->count_in_subtree);
-//    assert(tree->root->count_in_subtree == 0);
-
     return err;
 }
 
 int tree_move(Tree *tree, const char *source, const char *target) {
-//    printf("tree_move: %s, %s\n", source, target);
-//    printf("tree_move begin: %d\n", tree->root->count_in_subtree);
-//    assert(tree->root->count_in_subtree == 0);
-
     if (!is_path_valid(source) || !is_path_valid(target)) {
         return EINVAL;
     }
@@ -573,7 +589,7 @@ int tree_move(Tree *tree, const char *source, const char *target) {
     }
 
     if (is_substring(source, target)) {
-        return -1;
+        return ESRCSUBTRGT;
     }
 
     char *path_to_lca = make_path_to_lca(source, target);
@@ -685,7 +701,7 @@ int tree_move(Tree *tree, const char *source, const char *target) {
         }
         writer_ending_protocol(source_parent_node, tree->root, true);
     }
-    else { //if (target_parent_node == lca_node) {
+    else {
         if (source_parent_node != target_parent_node) {
             writer_ending_protocol(source_parent_node, lca_node, false);
         }
